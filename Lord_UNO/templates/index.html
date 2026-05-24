@@ -1,0 +1,686 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>UNO · ARENA</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Sans:wght@300;400;500;600&family=JetBrains+Mono:wght@400;700&display=swap" rel="stylesheet" />
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg:      #0a0a0f;
+      --surface: #12121a;
+      --border:  #1e1e2e;
+      --dim:     #1e1e30;
+      --red:     #ff3b3b;
+      --yellow:  #ffd600;
+      --green:   #00e676;
+      --blue:    #2979ff;
+      --purple:  #ab47bc;
+      --accent:  #ff3b3b;
+      --text:    #f0f0f8;
+      --muted:   #5a5a7a;
+    }
+
+    html, body {
+      min-height: 100%; background: var(--bg);
+      color: var(--text); font-family: 'DM Sans', sans-serif;
+      overflow-x: hidden;
+    }
+
+    body::before {
+      content: ''; position: fixed; inset: 0; z-index: 0; pointer-events: none;
+      background-image:
+        repeating-linear-gradient(0deg, transparent, transparent 39px, #ffffff04 39px, #ffffff04 40px),
+        repeating-linear-gradient(90deg, transparent, transparent 39px, #ffffff04 39px, #ffffff04 40px);
+    }
+
+    /* ── Blobs ── */
+    .blob { position: fixed; border-radius: 50%; filter: blur(120px); pointer-events: none; z-index: 0; opacity: .18; }
+    .blob-r { width:500px; height:500px; background:var(--red);    top:-100px; right:-100px; }
+    .blob-b { width:400px; height:400px; background:var(--blue);   bottom:-100px; left:-80px; }
+    .blob-y { width:300px; height:300px; background:var(--yellow); top:40%; left:45%; }
+
+    /* ── Floating deco cards ── */
+    .deco-cards { position:fixed; inset:0; pointer-events:none; z-index:0; overflow:hidden; }
+    .deco-card {
+      position:absolute; width:54px; height:80px;
+      border-radius:8px; border:1px solid #ffffff10; background:var(--surface);
+      animation:floatCard linear infinite; opacity:0;
+    }
+    .deco-card::after { content:''; position:absolute; inset:6px; border-radius:5px; border:2px solid currentColor; opacity:.3; }
+    .deco-card:nth-child(1){left:5%;  bottom:-90px;color:var(--red);   animation-duration:14s;animation-delay:0s}
+    .deco-card:nth-child(2){left:15%; bottom:-90px;color:var(--blue);  animation-duration:18s;animation-delay:2s}
+    .deco-card:nth-child(3){left:25%; bottom:-90px;color:var(--yellow);animation-duration:12s;animation-delay:4s}
+    .deco-card:nth-child(4){left:38%; bottom:-90px;color:var(--green); animation-duration:16s;animation-delay:1s}
+    .deco-card:nth-child(5){left:52%; bottom:-90px;color:var(--red);   animation-duration:20s;animation-delay:3s}
+    .deco-card:nth-child(6){left:65%; bottom:-90px;color:var(--blue);  animation-duration:13s;animation-delay:5s}
+    .deco-card:nth-child(7){left:75%; bottom:-90px;color:var(--yellow);animation-duration:17s;animation-delay:7s}
+    .deco-card:nth-child(8){left:88%; bottom:-90px;color:var(--green); animation-duration:15s;animation-delay:6s}
+    @keyframes floatCard {
+      0%  {transform:translateY(0) rotate(-8deg);opacity:0}
+      5%  {opacity:.25}
+      95% {opacity:.15}
+      100%{transform:translateY(-110vh) rotate(12deg);opacity:0}
+    }
+
+    /* ── Page layout ── */
+    .page {
+      position:relative; z-index:1; min-height:100vh;
+      display:flex; flex-direction:column; align-items:center;
+      padding:40px 20px 60px; gap:40px;
+    }
+
+    /* ── Logo ── */
+    .logo { text-align:center; animation:fadeDown .7s ease both; }
+    .logo-title {
+      font-family:'Bebas Neue',sans-serif;
+      font-size:clamp(72px,14vw,130px); letter-spacing:8px; line-height:1;
+      background:linear-gradient(135deg,#ff3b3b 0%,#ff8c00 40%,#ffd600 70%,#ff3b3b 100%);
+      -webkit-background-clip:text; -webkit-text-fill-color:transparent; background-clip:text;
+      filter:drop-shadow(0 0 40px #ff3b3b66);
+    }
+    .logo-sub {
+      font-family:'JetBrains Mono',monospace; font-size:12px; letter-spacing:6px;
+      color:var(--muted); text-transform:uppercase; margin-top:6px;
+    }
+
+    /* ── Panel ── */
+    .panel {
+      width:100%; max-width:520px;
+      background:var(--surface); border:1px solid var(--border);
+      border-radius:20px; padding:32px 28px;
+      animation:fadeUp .6s ease both; position:relative; overflow:hidden;
+    }
+    .panel::before {
+      content:''; position:absolute; top:0; left:0; right:0; height:2px;
+      background:linear-gradient(90deg,var(--red),var(--yellow),var(--green),var(--blue));
+    }
+
+    /* ── Tabs ── */
+    .tabs {
+      display:flex; gap:4px; background:var(--bg);
+      border-radius:10px; padding:4px; margin-bottom:28px;
+    }
+    .tab {
+      flex:1; padding:9px 8px; text-align:center;
+      font-size:12px; font-weight:600; letter-spacing:.5px;
+      color:var(--muted); border-radius:7px; cursor:pointer;
+      transition:all .2s; border:none; background:none;
+    }
+    .tab.active { background:var(--border); color:var(--text); }
+    .tab:hover:not(.active) { color:var(--text); }
+
+    /* ── Form sections ── */
+    .form-section { display:none; flex-direction:column; gap:16px; }
+    .form-section.visible { display:flex; animation:fadeUp .3s ease both; }
+
+    label {
+      font-size:11px; letter-spacing:1.5px; text-transform:uppercase;
+      color:var(--muted); font-weight:600; margin-bottom:6px; display:block;
+    }
+    input[type="text"] {
+      width:100%; background:var(--bg); border:1px solid var(--border);
+      color:var(--text); padding:12px 16px; border-radius:10px;
+      font-family:'DM Sans',sans-serif; font-size:15px;
+      transition:border-color .2s, box-shadow .2s; outline:none;
+    }
+    input[type="text"]:focus { border-color:var(--accent); box-shadow:0 0 0 3px #ff3b3b22; }
+    input[type="text"]::placeholder { color:var(--muted); }
+
+    .ruleset-grid { display:grid; grid-template-columns:repeat(3,1fr); gap:8px; }
+    .ruleset-btn {
+      padding:14px 8px; text-align:center; border-radius:10px; cursor:pointer;
+      border:2px solid var(--border); background:var(--bg); transition:all .2s; position:relative;
+    }
+    .ruleset-btn input { display:none; }
+    .ruleset-btn .rs-icon { font-size:22px; display:block; margin-bottom:6px; }
+    .ruleset-btn .rs-name { font-size:11px; font-weight:600; letter-spacing:1px; text-transform:uppercase; color:var(--muted); display:block; }
+    .ruleset-btn:has(input:checked) { border-color:var(--accent); background:#ff3b3b12; }
+    .ruleset-btn:has(input:checked) .rs-name { color:var(--text); }
+    .ruleset-btn:has(input:checked)::after { content:'✓'; position:absolute; top:6px; right:8px; font-size:11px; color:var(--accent); }
+    .ruleset-btn:hover:not(:has(input:checked)) { border-color:#ffffff22; }
+
+    .btn {
+      padding:14px 24px; border-radius:10px; font-family:'DM Sans',sans-serif;
+      font-size:15px; font-weight:600; cursor:pointer; border:none;
+      transition:all .15s; letter-spacing:.3px;
+    }
+    .btn-primary { background:linear-gradient(135deg,#ff3b3b,#ff6b00); color:#fff; box-shadow:0 4px 24px #ff3b3b44; }
+    .btn-primary:hover { transform:translateY(-1px); box-shadow:0 6px 32px #ff3b3b66; }
+    .btn-primary:active { transform:translateY(0); }
+    .btn-ghost { background:transparent; border:1px solid var(--border); color:var(--text); }
+    .btn-ghost:hover { border-color:#ffffff33; background:var(--border); }
+    .btn-block { width:100%; }
+
+    .mode-grid { display:grid; grid-template-columns:1fr 1fr; gap:10px; }
+    .mode-card {
+      padding:18px 14px; border-radius:12px; border:1px solid var(--border);
+      background:var(--bg); cursor:pointer; transition:all .2s; text-align:center;
+    }
+    .mode-card:hover { border-color:var(--accent); background:#ff3b3b08; }
+    .mode-card .mc-icon { font-size:28px; display:block; margin-bottom:8px; }
+    .mode-card .mc-name { font-size:13px; font-weight:600; color:var(--text); display:block; }
+    .mode-card .mc-desc { font-size:11px; color:var(--muted); margin-top:4px; display:block; }
+
+    .divider { display:flex; align-items:center; gap:12px; color:var(--muted); font-size:12px; margin:4px 0; }
+    .divider::before, .divider::after { content:''; flex:1; height:1px; background:var(--border); }
+
+    /* ════════════════════════════════════════
+       RULEBOOK STYLES
+    ════════════════════════════════════════ */
+    #tab-rules {
+      display:none; flex-direction:column; gap:0;
+      /* full scroll within panel */
+      max-height:72vh; overflow-y:auto;
+      scrollbar-width:thin; scrollbar-color:#2a2a3e transparent;
+      padding-right:4px;
+    }
+    #tab-rules.visible { display:flex; animation:fadeUp .3s ease both; }
+    #tab-rules::-webkit-scrollbar { width:4px; }
+    #tab-rules::-webkit-scrollbar-thumb { background:#2a2a3e; border-radius:4px; }
+
+    /* Mode selector tabs inside rulebook */
+    .rb-mode-tabs {
+      display:flex; gap:6px; margin-bottom:20px; flex-wrap:wrap;
+    }
+    .rb-mode-btn {
+      padding:7px 14px; border-radius:20px; font-size:11px; font-weight:700;
+      letter-spacing:1px; text-transform:uppercase; cursor:pointer;
+      border:1px solid var(--border); background:var(--bg); color:var(--muted);
+      transition:all .2s;
+    }
+    .rb-mode-btn.active { color:#fff; border-color:transparent; }
+    .rb-mode-btn.rb-normal.active  { background:linear-gradient(135deg,#ff3b3b,#ff6b00); box-shadow:0 2px 12px #ff3b3b44; }
+    .rb-mode-btn.rb-flip.active    { background:linear-gradient(135deg,#2979ff,#1565c0); box-shadow:0 2px 12px #2979ff44; }
+    .rb-mode-btn.rb-nomercy.active { background:linear-gradient(135deg,#ab47bc,#6a1b9a); box-shadow:0 2px 12px #ab47bc44; }
+
+    /* Rule page */
+    .rb-page { display:none; flex-direction:column; gap:18px; }
+    .rb-page.visible { display:flex; }
+
+    /* Section */
+    .rb-section { display:flex; flex-direction:column; gap:10px; }
+    .rb-section-title {
+      font-family:'Bebas Neue',sans-serif; font-size:20px; letter-spacing:2px;
+      display:flex; align-items:center; gap:8px;
+    }
+    .rb-section-title .rb-line {
+      flex:1; height:1px; background:var(--border);
+    }
+
+    /* Quick start steps */
+    .rb-steps { display:flex; flex-direction:column; gap:8px; }
+    .rb-step {
+      display:flex; gap:12px; align-items:flex-start;
+      background:var(--bg); border:1px solid var(--border);
+      border-radius:10px; padding:12px 14px;
+    }
+    .rb-step-num {
+      width:24px; height:24px; border-radius:50%; flex-shrink:0;
+      display:flex; align-items:center; justify-content:center;
+      font-family:'Bebas Neue',sans-serif; font-size:13px; font-weight:700;
+      background:var(--border); color:var(--text);
+    }
+    .rb-step-text { font-size:13px; line-height:1.55; color:var(--text); padding-top:3px; }
+    .rb-step-text strong { color:var(--yellow); font-weight:700; }
+
+    /* Card reference grid */
+    .rb-cards { display:flex; flex-direction:column; gap:6px; }
+    .rb-card-row {
+      display:flex; align-items:center; gap:12px;
+      background:var(--bg); border:1px solid var(--border);
+      border-radius:10px; padding:10px 14px;
+      transition:border-color .15s;
+    }
+    .rb-card-row:hover { border-color:#ffffff1a; }
+    .rb-card-pip {
+      width:36px; height:52px; border-radius:7px; flex-shrink:0;
+      display:flex; align-items:center; justify-content:center;
+      font-family:'Bebas Neue',sans-serif; font-size:18px; color:#fff;
+      font-style:italic; position:relative; overflow:hidden;
+      border:1.5px solid rgba(255,255,255,.2);
+      box-shadow:0 2px 8px rgba(0,0,0,.4);
+    }
+    .rb-card-pip::before {
+      content:''; position:absolute; inset:0;
+      background:linear-gradient(180deg,rgba(255,255,255,.12),transparent);
+    }
+    .pip-red    { background:linear-gradient(160deg,#e53935,#c62828); }
+    .pip-yellow { background:linear-gradient(160deg,#fdd835,#f9a825); }
+    .pip-green  { background:linear-gradient(160deg,#43a047,#2e7d32); }
+    .pip-blue   { background:linear-gradient(160deg,#1e88e5,#1565c0); }
+    .pip-wild   { background:linear-gradient(160deg,#1a1a2e,#2d2d44); }
+    .pip-pink   { background:linear-gradient(160deg,#e91e63,#ad1457); }
+    .pip-teal   { background:linear-gradient(160deg,#26c6da,#00838f); }
+    .pip-orange { background:linear-gradient(160deg,#fb8c00,#e65100); }
+    .pip-purple { background:linear-gradient(160deg,#ab47bc,#6a1b9a); }
+    .pip-yellow span { color:#1a1000; }
+
+    .rb-card-info { flex:1; min-width:0; }
+    .rb-card-name { font-size:13px; font-weight:700; color:var(--text); }
+    .rb-card-desc { font-size:12px; color:var(--muted); margin-top:3px; line-height:1.45; }
+    .rb-card-badge {
+      font-size:9px; font-weight:700; letter-spacing:1px; text-transform:uppercase;
+      padding:2px 7px; border-radius:10px; flex-shrink:0; align-self:flex-start; margin-top:2px;
+    }
+    .badge-action { background:#ff3b3b18; color:var(--red);    border:1px solid #ff3b3b33; }
+    .badge-wild   { background:#ffffff10; color:var(--muted);  border:1px solid #ffffff22; }
+    .badge-number { background:#00e67618; color:var(--green);  border:1px solid #00e67633; }
+    .badge-flip   { background:#2979ff18; color:var(--blue);   border:1px solid #2979ff33; }
+    .badge-mercy  { background:#ab47bc18; color:var(--purple); border:1px solid #ab47bc33; }
+
+    /* Rule bullets */
+    .rb-rules { display:flex; flex-direction:column; gap:7px; }
+    .rb-rule {
+      display:flex; gap:10px; align-items:flex-start;
+      font-size:13px; line-height:1.55; color:var(--muted);
+    }
+    .rb-rule-icon { font-size:16px; flex-shrink:0; margin-top:1px; }
+    .rb-rule strong { color:var(--text); }
+    .rb-rule a { color:var(--yellow); text-decoration:none; }
+
+    /* Tip box */
+    .rb-tip {
+      background:linear-gradient(135deg,#ffd60010,#ff8c0008);
+      border:1px solid #ffd60033; border-radius:10px;
+      padding:12px 14px; font-size:12px; color:var(--muted); line-height:1.6;
+    }
+    .rb-tip strong { color:var(--yellow); }
+
+    /* Warning box */
+    .rb-warning {
+      background:linear-gradient(135deg,#ff3b3b10,#ab47bc08);
+      border:1px solid #ff3b3b33; border-radius:10px;
+      padding:12px 14px; font-size:12px; color:var(--muted); line-height:1.6;
+    }
+    .rb-warning strong { color:var(--red); }
+
+    /* Mode header */
+    .rb-mode-header {
+      display:flex; flex-direction:column; gap:4px;
+      background:var(--bg); border:1px solid var(--border);
+      border-radius:12px; padding:14px 16px; margin-bottom:4px;
+    }
+    .rb-mode-header .rb-mh-title {
+      font-family:'Bebas Neue',sans-serif; font-size:24px; letter-spacing:3px;
+    }
+    .rb-mode-header .rb-mh-sub { font-size:12px; color:var(--muted); line-height:1.5; }
+
+    /* Deck stats */
+    .rb-stats { display:grid; grid-template-columns:repeat(3,1fr); gap:8px; }
+    .rb-stat {
+      background:var(--bg); border:1px solid var(--border); border-radius:10px;
+      padding:10px; text-align:center;
+    }
+    .rb-stat-num { font-family:'Bebas Neue',sans-serif; font-size:28px; }
+    .rb-stat-label { font-size:10px; letter-spacing:1px; text-transform:uppercase; color:var(--muted); margin-top:2px; }
+
+    @keyframes fadeDown { from{opacity:0;transform:translateY(-24px)}to{opacity:1;transform:translateY(0)} }
+    @keyframes fadeUp   { from{opacity:0;transform:translateY(20px)} to{opacity:1;transform:translateY(0)}  }
+
+    #toast {
+      position:fixed; bottom:28px; left:50%; transform:translateX(-50%) translateY(20px);
+      background:#1a1a2e; border:1px solid var(--border); color:var(--text);
+      padding:12px 24px; border-radius:40px; font-size:13px; font-weight:500;
+      opacity:0; transition:all .3s; pointer-events:none; z-index:999;
+    }
+    #toast.show { opacity:1; transform:translateX(-50%) translateY(0); }
+    #toast.error { border-color:var(--red); color:var(--red); }
+
+    @media (max-width:480px) {
+      .panel { padding:24px 16px; border-radius:16px; }
+      .mode-grid { grid-template-columns:1fr; }
+      .rb-stats { grid-template-columns:repeat(3,1fr); }
+    }
+  </style>
+</head>
+<body>
+
+<div class="blob blob-r"></div>
+<div class="blob blob-b"></div>
+<div class="blob blob-y"></div>
+<div class="deco-cards">
+  <div class="deco-card"></div><div class="deco-card"></div>
+  <div class="deco-card"></div><div class="deco-card"></div>
+  <div class="deco-card"></div><div class="deco-card"></div>
+  <div class="deco-card"></div><div class="deco-card"></div>
+</div>
+
+<div class="page">
+
+  <div class="logo">
+    <div class="logo-title">UNO</div>
+    <div class="logo-sub">Arena &nbsp;·&nbsp; Multiplayer Card Game</div>
+  </div>
+
+  <div class="panel">
+
+    <!-- ── 3 Tabs ── -->
+    <div class="tabs">
+      <button class="tab active"  onclick="switchTab('create')">Create</button>
+      <button class="tab"         onclick="switchTab('join')">Join</button>
+      <button class="tab"         onclick="switchTab('rules')">📖 Rules</button>
+    </div>
+
+    <!-- ══════════════════════════════════
+         CREATE GAME
+    ══════════════════════════════════ -->
+    <form class="form-section visible" id="tab-create" action="/create_game" method="POST">
+      <div>
+        <label>Your Name</label>
+        <input type="text" name="username" placeholder="Enter username…" maxlength="24" required autocomplete="off" />
+      </div>
+      <div>
+        <label>Game Mode</label>
+        <div class="ruleset-grid">
+          <label class="ruleset-btn">
+            <input type="radio" name="ruleset" value="normal" checked />
+            <span class="rs-icon">🃏</span>
+            <span class="rs-name">Normal</span>
+          </label>
+          <label class="ruleset-btn">
+            <input type="radio" name="ruleset" value="flip" />
+            <span class="rs-icon">🔄</span>
+            <span class="rs-name">Flip</span>
+          </label>
+          <label class="ruleset-btn">
+            <input type="radio" name="ruleset" value="nomercy" />
+            <span class="rs-icon">💀</span>
+            <span class="rs-name">No Mercy</span>
+          </label>
+        </div>
+      </div>
+      <button type="submit" class="btn btn-primary btn-block">Create Room</button>
+      <div class="divider">or</div>
+      <div class="mode-grid">
+        <div class="mode-card" onclick="switchTab('join')">
+          <span class="mc-icon">🔗</span>
+          <span class="mc-name">Join Room</span>
+          <span class="mc-desc">Enter a code</span>
+        </div>
+        <div class="mode-card" onclick="showComingSoon()">
+          <span class="mc-icon">🌐</span>
+          <span class="mc-name">Quick Match</span>
+          <span class="mc-desc">Coming soon</span>
+        </div>
+      </div>
+    </form>
+
+    <!-- ══════════════════════════════════
+         JOIN GAME
+    ══════════════════════════════════ -->
+    <form class="form-section" id="tab-join" action="/join_game" method="POST">
+      <div>
+        <label>Your Name</label>
+        <input type="text" name="username" placeholder="Enter username…" maxlength="24" required autocomplete="off" />
+      </div>
+      <div>
+        <label>Room Code</label>
+        <input type="text" name="room_code" placeholder="e.g. AB12CD" maxlength="6" required autocomplete="off"
+               style="text-transform:uppercase;font-family:'JetBrains Mono',monospace;letter-spacing:4px;font-size:18px;"
+               oninput="this.value=this.value.toUpperCase()" />
+      </div>
+      <button type="submit" class="btn btn-primary btn-block">Join Game</button>
+      <button type="button" class="btn btn-ghost btn-block" onclick="switchTab('create')">← Back</button>
+    </form>
+
+    <!-- ══════════════════════════════════
+         RULEBOOK
+    ══════════════════════════════════ -->
+    <div class="form-section" id="tab-rules">
+
+      <!-- Mode selector -->
+      <div class="rb-mode-tabs">
+        <button class="rb-mode-btn rb-normal active" onclick="switchRules('normal')">🃏 Normal</button>
+        <button class="rb-mode-btn rb-flip"          onclick="switchRules('flip')">🔄 Flip</button>
+        <button class="rb-mode-btn rb-nomercy"       onclick="switchRules('nomercy')">💀 No Mercy</button>
+      </div>
+
+      <!-- ── NORMAL RULES ── -->
+      <div class="rb-page visible" id="rb-normal">
+
+        <div class="rb-mode-header">
+          <span class="rb-mh-title" style="color:var(--red)">NORMAL UNO</span>
+          <span class="rb-mh-sub">The classic card game. First player to empty their hand wins. 2–10 players.</span>
+        </div>
+
+        <div class="rb-stats">
+          <div class="rb-stat"><div class="rb-stat-num" style="color:var(--red)">108</div><div class="rb-stat-label">Cards</div></div>
+          <div class="rb-stat"><div class="rb-stat-num" style="color:var(--yellow)">7</div><div class="rb-stat-label">Dealt each</div></div>
+          <div class="rb-stat"><div class="rb-stat-num" style="color:var(--green)">2–10</div><div class="rb-stat-label">Players</div></div>
+        </div>
+
+        <div class="rb-section">
+          <div class="rb-section-title" style="color:var(--yellow)">⚡ Quick Start <span class="rb-line"></span></div>
+          <div class="rb-steps">
+            <div class="rb-step"><div class="rb-step-num">1</div><div class="rb-step-text">Each player is dealt <strong>7 cards</strong>. The remaining cards form the draw pile.</div></div>
+            <div class="rb-step"><div class="rb-step-num">2</div><div class="rb-step-text">Flip the top card to start the discard pile. Play begins clockwise from the host.</div></div>
+            <div class="rb-step"><div class="rb-step-num">3</div><div class="rb-step-text">On your turn, play a card matching the <strong>color or value</strong> of the top discard card.</div></div>
+            <div class="rb-step"><div class="rb-step-num">4</div><div class="rb-step-text">If you can't play, <strong>draw one card</strong> from the pile and your turn ends.</div></div>
+            <div class="rb-step"><div class="rb-step-num">5</div><div class="rb-step-text">When you have <strong>one card left</strong>, tap the <strong>UNO!</strong> button before playing it!</div></div>
+            <div class="rb-step"><div class="rb-step-num">6</div><div class="rb-step-text">First player to play <strong>all their cards</strong> wins the round! 🏆</div></div>
+          </div>
+        </div>
+
+        <div class="rb-section">
+          <div class="rb-section-title" style="color:var(--red)">🃏 Card Reference <span class="rb-line"></span></div>
+          <div class="rb-cards">
+            <div class="rb-card-row">
+              <div class="rb-card-pip pip-red"><span>0–9</span></div>
+              <div class="rb-card-info"><div class="rb-card-name">Number Cards</div><div class="rb-card-desc">Play on matching color or matching number. 4 colors × 19 cards each.</div></div>
+              <div class="rb-card-badge badge-number">Number</div>
+            </div>
+            <div class="rb-card-row">
+              <div class="rb-card-pip pip-blue"><span>⊘</span></div>
+              <div class="rb-card-info"><div class="rb-card-name">Skip</div><div class="rb-card-desc">The next player loses their turn entirely. In 2-player, acts like playing again.</div></div>
+              <div class="rb-card-badge badge-action">Action</div>
+            </div>
+            <div class="rb-card-row">
+              <div class="rb-card-pip pip-green"><span>↺</span></div>
+              <div class="rb-card-info"><div class="rb-card-name">Reverse</div><div class="rb-card-desc">Flip the direction of play. In 2-player, acts like a Skip.</div></div>
+              <div class="rb-card-badge badge-action">Action</div>
+            </div>
+            <div class="rb-card-row">
+              <div class="rb-card-pip pip-red"><span>+2</span></div>
+              <div class="rb-card-info"><div class="rb-card-name">Draw 2</div><div class="rb-card-desc">Next player draws 2 and loses their turn. Can be stacked — next player must draw or counter-stack with another Draw 2.</div></div>
+              <div class="rb-card-badge badge-action">Action</div>
+            </div>
+            <div class="rb-card-row">
+              <div class="rb-card-pip pip-wild"><span>★</span></div>
+              <div class="rb-card-info"><div class="rb-card-name">Wild</div><div class="rb-card-desc">Can be played on any card. You choose the new active color.</div></div>
+              <div class="rb-card-badge badge-wild">Wild</div>
+            </div>
+            <div class="rb-card-row">
+              <div class="rb-card-pip pip-wild"><span>+4</span></div>
+              <div class="rb-card-info"><div class="rb-card-name">Wild Draw 4</div><div class="rb-card-desc">Choose the new color AND the next player draws 4 cards. Stackable with other draw cards.</div></div>
+              <div class="rb-card-badge badge-wild">Wild</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="rb-section">
+          <div class="rb-section-title" style="color:var(--green)">📋 Key Rules <span class="rb-line"></span></div>
+          <div class="rb-rules">
+            <div class="rb-rule"><span class="rb-rule-icon">🚨</span><div><strong>UNO Call:</strong> You must tap <strong>UNO!</strong> when you play your second-to-last card (leaving 1). If you forget and another player challenges you, you draw 2 penalty cards.</div></div>
+            <div class="rb-rule"><span class="rb-rule-icon">⚔️</span><div><strong>Challenge UNO:</strong> Tap any player's chip to challenge them. If they have 1 card and didn't call UNO, they draw 2!</div></div>
+            <div class="rb-rule"><span class="rb-rule-icon">🔄</span><div><strong>Draw Stacking:</strong> Draw 2 and Wild Draw 4 can be stacked. If you receive a draw penalty, you must take all stacked cards unless you counter with another draw card.</div></div>
+            <div class="rb-rule"><span class="rb-rule-icon">♻️</span><div><strong>Deck Reshuffle:</strong> When the draw pile runs out, the discard pile (except the top card) is shuffled and becomes the new draw pile.</div></div>
+          </div>
+        </div>
+
+        <div class="rb-tip">💡 <strong>Pro tip:</strong> Save Wild Draw 4s for when you're desperate — play color-matching cards first to keep your Wild cards as insurance. Watch opponents with few cards and be ready to challenge!
+        </div>
+
+      </div><!-- /rb-normal -->
+
+      <!-- ── FLIP RULES ── -->
+      <div class="rb-page" id="rb-flip">
+
+        <div class="rb-mode-header">
+          <span class="rb-mh-title" style="color:var(--blue)">UNO FLIP</span>
+          <span class="rb-mh-sub">Two-sided cards — light and dark. Playing a Flip card switches the entire board between sides. Dark side rules are brutal.</span>
+        </div>
+
+        <div class="rb-stats">
+          <div class="rb-stat"><div class="rb-stat-num" style="color:var(--blue)">2</div><div class="rb-stat-label">Sides</div></div>
+          <div class="rb-stat"><div class="rb-stat-num" style="color:var(--yellow)">7</div><div class="rb-stat-label">Dealt each</div></div>
+          <div class="rb-stat"><div class="rb-stat-num" style="color:var(--green)">2–10</div><div class="rb-stat-label">Players</div></div>
+        </div>
+
+        <div class="rb-section">
+          <div class="rb-section-title" style="color:var(--yellow)">⚡ How It Works <span class="rb-line"></span></div>
+          <div class="rb-steps">
+            <div class="rb-step"><div class="rb-step-num">1</div><div class="rb-step-text">Game starts on the <strong>Light Side</strong>. Normal UNO rules apply with one addition: the Flip card.</div></div>
+            <div class="rb-step"><div class="rb-step-num">2</div><div class="rb-step-text">When a <strong>Flip</strong> card is played, all players flip to the <strong>Dark Side</strong> of their hand. Only dark-side cards may be played.</div></div>
+            <div class="rb-step"><div class="rb-step-num">3</div><div class="rb-step-text">Another Flip card flips back to the <strong>Light Side</strong>. You can flip back and forth throughout the game.</div></div>
+            <div class="rb-step"><div class="rb-step-num">4</div><div class="rb-step-text">Dark side cards are more powerful — <strong>Draw 5</strong> instead of Draw 2, and brutal special cards.</div></div>
+          </div>
+        </div>
+
+        <div class="rb-section">
+          <div class="rb-section-title" style="color:var(--blue)">🌑 Dark Side Cards <span class="rb-line"></span></div>
+          <div class="rb-cards">
+            <div class="rb-card-row">
+              <div class="rb-card-pip pip-pink"><span>+5</span></div>
+              <div class="rb-card-info"><div class="rb-card-name">Draw 5 <span style="color:var(--muted);font-size:11px">(Dark)</span></div><div class="rb-card-desc">Next player draws 5 cards and loses their turn. Stackable with other dark draw cards.</div></div>
+              <div class="rb-card-badge badge-flip">Dark</div>
+            </div>
+            <div class="rb-card-row">
+              <div class="rb-card-pip pip-teal"><span>⊘⊘</span></div>
+              <div class="rb-card-info"><div class="rb-card-name">Skip Everyone <span style="color:var(--muted);font-size:11px">(Dark)</span></div><div class="rb-card-desc">ALL other players are skipped. You play again immediately. Devastating in large groups.</div></div>
+              <div class="rb-card-badge badge-flip">Dark</div>
+            </div>
+            <div class="rb-card-row">
+              <div class="rb-card-pip pip-wild"><span>✦</span></div>
+              <div class="rb-card-info"><div class="rb-card-name">Wild Draw Color <span style="color:var(--muted);font-size:11px">(Dark)</span></div><div class="rb-card-desc">You choose a color. The next player keeps drawing until they pull a card of that color. Could be catastrophic!</div></div>
+              <div class="rb-card-badge badge-wild">Wild</div>
+            </div>
+            <div class="rb-card-row">
+              <div class="rb-card-pip pip-orange"><span>⇌</span></div>
+              <div class="rb-card-info"><div class="rb-card-name">Flip <span style="color:var(--muted);font-size:11px">(Both sides)</span></div><div class="rb-card-desc">Flips the board between Light and Dark. Exists on both sides of the deck. The strategic pivot card.</div></div>
+              <div class="rb-card-badge badge-flip">Flip</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="rb-section">
+          <div class="rb-section-title" style="color:var(--green)">🌈 Light vs Dark Colors <span class="rb-line"></span></div>
+          <div class="rb-rules">
+            <div class="rb-rule"><span class="rb-rule-icon">☀️</span><div><strong>Light Side:</strong> Red · Yellow · Green · Blue — classic UNO colors.</div></div>
+            <div class="rb-rule"><span class="rb-rule-icon">🌙</span><div><strong>Dark Side:</strong> Pink · Teal · Orange · Purple — four entirely new colors. They don't mix with light-side colors.</div></div>
+            <div class="rb-rule"><span class="rb-rule-icon">⚠️</span><div><strong>Important:</strong> You can only play cards matching the current side. Light cards cannot be played on the dark side and vice versa.</div></div>
+          </div>
+        </div>
+
+        <div class="rb-warning">⚠️ <strong>Flip Strategy:</strong> If the dark side is hurting you, saving a Flip card to switch back to the light side can be a lifesaver — but it also lets your opponents play their light cards again!
+        </div>
+
+      </div><!-- /rb-flip -->
+
+      <!-- ── NO MERCY RULES ── -->
+      <div class="rb-page" id="rb-nomercy">
+
+        <div class="rb-mode-header">
+          <span class="rb-mh-title" style="color:var(--purple)">UNO NO MERCY</span>
+          <span class="rb-mh-sub">The most brutal UNO. Massively powerful draw cards, elimination, and chaos. Not for the faint-hearted.</span>
+        </div>
+
+        <div class="rb-stats">
+          <div class="rb-stat"><div class="rb-stat-num" style="color:var(--purple)">25+</div><div class="rb-stat-label">Eliminated</div></div>
+          <div class="rb-stat"><div class="rb-stat-num" style="color:var(--red)">10</div><div class="rb-stat-label">Draw 10</div></div>
+          <div class="rb-stat"><div class="rb-stat-num" style="color:var(--yellow)">∞</div><div class="rb-stat-label">Stackable</div></div>
+        </div>
+
+        <div class="rb-section">
+          <div class="rb-section-title" style="color:var(--red)">💀 Exclusive Cards <span class="rb-line"></span></div>
+          <div class="rb-cards">
+            <div class="rb-card-row">
+              <div class="rb-card-pip pip-red"><span>+6</span></div>
+              <div class="rb-card-info"><div class="rb-card-name">Draw 6</div><div class="rb-card-desc">Next player draws 6 cards. Fully stackable with all other draw cards — Draw 2, Draw 6, Draw 10, and Wild Draw 4.</div></div>
+              <div class="rb-card-badge badge-mercy">Brutal</div>
+            </div>
+            <div class="rb-card-row">
+              <div class="rb-card-pip pip-wild"><span>+10</span></div>
+              <div class="rb-card-info"><div class="rb-card-name">Wild Draw 10</div><div class="rb-card-desc">Choose the new color. The next player draws 10 cards. Stackable. One card can end someone's game.</div></div>
+              <div class="rb-card-badge badge-mercy">Brutal</div>
+            </div>
+            <div class="rb-card-row">
+              <div class="rb-card-pip pip-green"><span>✕</span></div>
+              <div class="rb-card-info"><div class="rb-card-name">Discard All</div><div class="rb-card-desc">You discard your ENTIRE hand to the discard pile. If this empties your hand, you win immediately!</div></div>
+              <div class="rb-card-badge badge-mercy">Brutal</div>
+            </div>
+            <div class="rb-card-row">
+              <div class="rb-card-pip pip-wild"><span>🎲</span></div>
+              <div class="rb-card-info"><div class="rb-card-name">Wild Roulette</div><div class="rb-card-desc">A random opponent draws 2 cards. You choose the color. Chaos guaranteed — you never know who the game will punish.</div></div>
+              <div class="rb-card-badge badge-mercy">Brutal</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="rb-section">
+          <div class="rb-section-title" style="color:var(--purple)">⚡ Special Rules <span class="rb-line"></span></div>
+          <div class="rb-rules">
+            <div class="rb-rule"><span class="rb-rule-icon">💀</span><div><strong>Elimination:</strong> Any player who accumulates <strong>25 or more cards</strong> is immediately eliminated from the game. Their cards are removed and play continues.</div></div>
+            <div class="rb-rule"><span class="rb-rule-icon">📚</span><div><strong>Mega Stacking:</strong> Draw 2, Draw 6, Wild Draw 4, and Draw 10 can ALL be stacked on each other freely. A full stack can easily reach 20+ cards.</div></div>
+            <div class="rb-rule"><span class="rb-rule-icon">🃏</span><div><strong>Discard All Win:</strong> Playing Discard All when you have exactly 1 card remaining is an instant win — even without calling UNO first.</div></div>
+            <div class="rb-rule"><span class="rb-rule-icon">🎯</span><div><strong>Last Player Standing:</strong> If all other players get eliminated, the surviving player wins automatically.</div></div>
+          </div>
+        </div>
+
+        <div class="rb-warning">💀 <strong>Danger Zone:</strong> Keep your hand under 20 cards at all times. Once you hit 22+, a single Draw 6 from an opponent can eliminate you instantly. Prioritize playing draw cards to pass the pain forward!</div>
+
+        <div class="rb-tip">💡 <strong>Survival tip:</strong> Discard All is your escape hatch — hold it until you have 10+ cards and play it to reset. Wild Roulette is best saved for when you want chaos, not when you're already losing.
+        </div>
+
+      </div><!-- /rb-nomercy -->
+
+    </div><!-- /tab-rules -->
+
+  </div><!-- /panel -->
+</div><!-- /page -->
+
+<div id="toast"></div>
+
+<script>
+  // ── Tab switching ──
+  function switchTab(name) {
+    const tabs = document.querySelectorAll('.tab');
+    tabs[0].classList.toggle('active', name==='create');
+    tabs[1].classList.toggle('active', name==='join');
+    tabs[2].classList.toggle('active', name==='rules');
+    document.getElementById('tab-create').classList.toggle('visible', name==='create');
+    document.getElementById('tab-join').classList.toggle('visible',   name==='join');
+    document.getElementById('tab-rules').classList.toggle('visible',  name==='rules');
+  }
+
+  // ── Rulebook mode switching ──
+  function switchRules(mode) {
+    document.querySelectorAll('.rb-mode-btn').forEach(b => b.classList.remove('active'));
+    document.querySelectorAll('.rb-page').forEach(p => p.classList.remove('visible'));
+    document.querySelector(`.rb-mode-btn.rb-${mode}`).classList.add('active');
+    document.getElementById(`rb-${mode}`).classList.add('visible');
+  }
+
+  function showComingSoon() {
+    showToast('Quick Match coming soon! Create or join a room for now.');
+  }
+
+  function showToast(msg, isError=false) {
+    const t = document.getElementById('toast');
+    t.textContent = msg;
+    t.className = 'show' + (isError ? ' error' : '');
+    clearTimeout(t._timer);
+    t._timer = setTimeout(() => t.className = '', 3000);
+  }
+
+  const params = new URLSearchParams(location.search);
+  if (params.get('error')) showToast(decodeURIComponent(params.get('error')), true);
+
+  // Open rules tab if ?rules=1 in URL
+  if (params.get('rules')) switchTab('rules');
+</script>
+</body>
+</html>

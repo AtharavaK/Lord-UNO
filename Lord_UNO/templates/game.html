@@ -1,0 +1,1570 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <title>UNO · Game Room</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Sans:wght@300;400;500;600&family=JetBrains+Mono:wght@400;700&display=swap" rel="stylesheet" />
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.7.5/socket.io.min.js"></script>
+  <script src="/static/js/sound.js"></script>
+  <link rel="stylesheet" href="/static/css/style.css" />
+
+  <style>
+    /* ══════════════════════════════════════════════
+       RESET & ROOT
+    ══════════════════════════════════════════════ */
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg:        #0a0a0f;
+      --surface:   #12121a;
+      --border:    #1e1e2e;
+      --dim:       #2a2a3e;
+      --red:       #ff3b3b;
+      --yellow:    #ffd600;
+      --green:     #00e676;
+      --blue:      #2979ff;
+      --pink:      #f06292;
+      --teal:      #26c6da;
+      --orange:    #ff7043;
+      --purple:    #ab47bc;
+      --text:      #f0f0f8;
+      --muted:     #5a5a7a;
+      --hand-h:    180px;
+      --topbar-h:  56px;
+    }
+
+    html, body {
+      height: 100%;
+      background: var(--bg);
+      color: var(--text);
+      font-family: 'DM Sans', sans-serif;
+      overscroll-behavior: none;
+    }
+    /* KEY FIX: NO overflow:hidden — that was clipping the hand tray */
+    body { overflow-x: hidden; }
+
+    body::before {
+      content: ''; position: fixed; inset: 0; z-index: 0; pointer-events: none;
+      background-image:
+        repeating-linear-gradient(0deg, transparent, transparent 39px, #ffffff03 39px, #ffffff03 40px),
+        repeating-linear-gradient(90deg, transparent, transparent 39px, #ffffff03 39px, #ffffff03 40px);
+    }
+
+    /* ══════════════════════════════════════════════
+       TOP BAR — fixed
+    ══════════════════════════════════════════════ */
+    .topbar {
+      position: fixed; top: 0; left: 0; right: 0; z-index: 100;
+      height: var(--topbar-h);
+      display: flex; align-items: center; gap: 10px; padding: 0 14px;
+      background: var(--surface); border-bottom: 1px solid var(--border);
+    }
+    .topbar::after {
+      content: ''; position: absolute; bottom: 0; left: 0; right: 0; height: 2px;
+      background: linear-gradient(90deg, var(--red), var(--yellow), var(--green), var(--blue));
+    }
+    .topbar-logo {
+      font-family: 'Bebas Neue', sans-serif; font-size: 24px; letter-spacing: 3px;
+      background: linear-gradient(135deg, #ff3b3b, #ffd600);
+      -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text;
+      flex-shrink: 0;
+    }
+    .topbar-room {
+      font-family: 'JetBrains Mono', monospace; font-size: 11px; color: var(--muted);
+      background: var(--bg); padding: 3px 10px; border-radius: 6px;
+      border: 1px solid var(--border); letter-spacing: 2px; flex-shrink: 0;
+    }
+    .topbar-ruleset {
+      font-size: 10px; font-weight: 700; letter-spacing: 1.5px; text-transform: uppercase;
+      padding: 3px 8px; border-radius: 5px; flex-shrink: 0;
+    }
+    .rs-normal  { background:#ff3b3b18; color:var(--red);    border:1px solid #ff3b3b33; }
+    .rs-flip    { background:#2979ff18; color:var(--blue);   border:1px solid #2979ff33; }
+    .rs-nomercy { background:#ab47bc18; color:var(--purple); border:1px solid #ab47bc33; }
+    .topbar-spacer { flex: 1; min-width: 0; }
+    .side-badge {
+      display: none; font-size: 10px; font-weight: 700; letter-spacing: 1px;
+      padding: 3px 8px; border-radius: 5px; text-transform: uppercase; flex-shrink: 0;
+    }
+    .side-badge.light { background:#ffd60022; color:var(--yellow); border:1px solid #ffd60033; display:inline-block; }
+    .side-badge.dark  { background:#ab47bc22; color:var(--purple); border:1px solid #ab47bc33; display:inline-block; }
+    .color-indicator { display:flex; align-items:center; gap:6px; flex-shrink:0; }
+    .color-dot {
+      width:14px; height:14px; border-radius:50%;
+      border:2px solid rgba(255,255,255,.3); transition:background .4s, box-shadow .4s;
+    }
+    .color-label { font-size:10px; letter-spacing:1px; text-transform:uppercase; font-weight:600; transition:color .4s; }
+    @media (max-width:480px) { .color-label { display:none; } .topbar-room { display:none; } }
+
+    /* ── Sound controls ── */
+    .sound-controls { position:relative; flex-shrink:0; }
+    .sound-btn {
+      background:none; border:1px solid var(--border); border-radius:7px;
+      color:var(--text); font-size:16px; width:32px; height:32px;
+      cursor:pointer; transition:background .15s; display:flex; align-items:center; justify-content:center;
+    }
+    .sound-btn:hover { background:var(--border); }
+    .sound-btn.muted { opacity:.4; }
+    .sound-panel {
+      display:none; position:absolute; top:38px; right:0;
+      background:var(--surface); border:1px solid var(--border);
+      border-radius:12px; padding:14px 16px; width:200px; z-index:200;
+      flex-direction:column; gap:12px;
+      box-shadow:0 8px 32px rgba(0,0,0,.5);
+    }
+    .sound-panel.open { display:flex; animation:fadeUp .2s ease both; }
+    .sp-row { display:flex; align-items:center; gap:10px; }
+    .sp-label { font-size:10px; letter-spacing:1px; text-transform:uppercase; color:var(--muted); width:36px; flex-shrink:0; }
+    .sp-theme-btns { display:flex; gap:4px; flex:1; }
+    .sp-theme {
+      flex:1; padding:5px 4px; border-radius:6px; font-size:10px; font-weight:700;
+      cursor:pointer; border:1px solid var(--border); background:var(--bg); color:var(--muted);
+      transition:all .15s;
+    }
+    .sp-theme.active { background:var(--red); color:#fff; border-color:var(--red); }
+    .sp-slider {
+      flex:1; accent-color:var(--red); height:4px; cursor:pointer;
+    }
+
+    /* ══════════════════════════════════════════════
+       GAME WRAP — pushed below topbar, space for hand tray
+    ══════════════════════════════════════════════ */
+    .game-wrap {
+      position: relative; z-index: 1;
+      padding-top: var(--topbar-h);
+      padding-bottom: var(--hand-h);
+      min-height: 100vh;
+      display: flex;
+    }
+    @media (min-width:768px) {
+      .game-wrap { display:grid; grid-template-columns:200px 1fr 200px; align-items:stretch; }
+    }
+
+    /* ══════════════════════════════════════════════
+       LEFT PANEL
+    ══════════════════════════════════════════════ */
+    .left-panel {
+      display:none;
+      background:var(--surface); border-right:1px solid var(--border);
+      padding:14px 10px; overflow-y:auto; flex-direction:column; gap:6px;
+    }
+    @media (min-width:768px) { .left-panel { display:flex; } }
+    .panel-title {
+      font-size:9px; letter-spacing:2px; text-transform:uppercase;
+      color:var(--muted); padding:0 4px; margin-bottom:6px;
+    }
+    .player-item {
+      padding:8px 10px; border-radius:10px; border:1px solid transparent;
+      background:var(--bg); transition:all .2s;
+      display:flex; align-items:center; gap:8px; cursor:pointer;
+    }
+    .player-item.active-turn { border-color:var(--yellow); background:#ffd60010; box-shadow:0 0 12px #ffd60022; }
+    .player-item.is-me       { border-color:var(--green);  background:#00e67610; }
+    .player-item.eliminated  { opacity:.35; }
+    .player-avatar {
+      width:30px; height:30px; border-radius:7px; flex-shrink:0;
+      display:flex; align-items:center; justify-content:center;
+      font-weight:700; font-size:12px; text-transform:uppercase;
+    }
+    .player-info { flex:1; min-width:0; }
+    .player-name { font-size:12px; font-weight:600; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+    .player-cards { font-size:10px; color:var(--muted); }
+    .uno-badge {
+      font-size:8px; font-weight:800; letter-spacing:1px; color:var(--red);
+      background:#ff3b3b18; border:1px solid #ff3b3b44; padding:2px 4px; border-radius:4px; flex-shrink:0;
+    }
+
+    /* ══════════════════════════════════════════════
+       BOARD
+    ══════════════════════════════════════════════ */
+    .board {
+      flex:1; display:flex; flex-direction:column;
+      align-items:center; justify-content:center;
+      gap:18px; padding:16px;
+      min-height:calc(100vh - var(--topbar-h) - var(--hand-h));
+    }
+    .turn-indicator { font-size:14px; color:var(--muted); font-weight:500; text-align:center; }
+    .turn-indicator .my-turn  { color:var(--green); font-size:18px; font-weight:800; }
+    .turn-indicator .opp-name { color:var(--yellow); font-weight:700; }
+
+    .pile-area { display:flex; align-items:center; gap:24px; }
+
+    /* ── Cards ── */
+    .card {
+      width:84px; height:126px; border-radius:14px;
+      position:relative; flex-shrink:0; transform-style:preserve-3d;
+      transition:transform .15s, box-shadow .15s;
+      /* Subtle drop shadow on every card */
+      box-shadow: 0 4px 16px rgba(0,0,0,.5), 0 1px 3px rgba(0,0,0,.8);
+    }
+    .card:hover { transform:translateY(-5px); }
+
+    .card-inner {
+      width:100%; height:100%; border-radius:14px;
+      display:flex; align-items:center; justify-content:center;
+      position:relative; overflow:hidden;
+      /* Crisp white border around entire card */
+      border:3px solid rgba(255,255,255,.9);
+    }
+    /* Oval is now injected as inline SVG in cardHTML() — no pseudo-element needed */
+    /* Light sheen at top */
+    .card-inner::after {
+      content:''; position:absolute;
+      top:0; left:0; right:0; height:40%;
+      background:linear-gradient(180deg,rgba(255,255,255,.15),transparent);
+      pointer-events:none; z-index:0; border-radius:12px 12px 0 0;
+    }
+
+    /* Big bold center number */
+    .card-value {
+      font-family:'Bebas Neue',sans-serif;
+      font-size:58px; line-height:1;
+      color:#fff;
+      text-shadow:
+        2px 2px 0 rgba(0,0,0,.55),
+        0 4px 14px rgba(0,0,0,.5),
+        -1px -1px 0 rgba(0,0,0,.3);
+      position:relative; z-index:1;
+      font-style:italic;
+      letter-spacing:-2px;
+    }
+
+    /* Corner labels */
+    .card-corner {
+      position:absolute;
+      line-height:1; z-index:2;
+      color:#fff;
+      font-family:'Bebas Neue',sans-serif;
+      font-size:16px;
+      font-style:italic;
+      font-weight:900;
+      text-shadow:1px 1px 2px rgba(0,0,0,.5);
+    }
+    .card-corner svg { display:block; }
+    .card-corner.tl { top:5px;    left:6px; }
+    .card-corner.br { bottom:5px; right:6px; }
+
+    /* Center symbol container */
+    .card-symbol {
+      display:flex; align-items:center; justify-content:center;
+      position:relative; z-index:1;
+      filter:drop-shadow(0 2px 6px rgba(0,0,0,.5));
+    }
+    .card-symbol svg { display:block; overflow:visible; }
+
+    /* Yellow cards need dark icons */
+    .card-yellow .card-corner { color:#1a1000; text-shadow:none; }
+    .card-yellow .card-corner svg { stroke:#1a1000 !important; }
+    .card-yellow .card-symbol { filter:drop-shadow(0 1px 3px rgba(0,0,0,.3)); }
+    .card-yellow .card-inner { border-color:rgba(255,255,255,.9); }
+    .card-yellow .card-inner::before { border-color:rgba(255,255,255,.75); }
+
+    /* ── Color themes — vivid, saturated ── */
+    .card-red    { background:linear-gradient(160deg,#ee3030,#b71c1c); }
+    .card-yellow { background:linear-gradient(160deg,#fdd835,#f9a825); }
+    .card-green  { background:linear-gradient(160deg,#2e9e3a,#1b5e20); }
+    .card-blue   { background:linear-gradient(160deg,#1976d2,#0d47a1); }
+    .card-pink   { background:linear-gradient(160deg,#e91e63,#880e4f); }
+    .card-teal   { background:linear-gradient(160deg,#26c6da,#006064); }
+    .card-orange { background:linear-gradient(160deg,#fb8c00,#bf360c); }
+    .card-purple { background:linear-gradient(160deg,#9c27b0,#4a148c); }
+    .card-wild   { background:linear-gradient(160deg,#111122,#222244); }
+
+    /* Yellow needs dark text for contrast */
+    .card-yellow .card-value,
+    .card-yellow .card-corner { color:#1a1000; text-shadow:0 1px 0 rgba(255,255,255,.2); }
+
+    /* Wild — rainbow quartered background */
+    .card-wild .card-inner { border-color:rgba(255,255,255,.85); }
+    .card-wild .card-inner::before { border-color:rgba(255,255,255,.3); }
+    .card-wild .card-value { font-size:20px; text-align:center; line-height:1.15; font-style:normal; letter-spacing:0; }
+
+    /* Deck (face-down) — classic UNO back */
+    .card-deck {
+      background:#0a0a22; cursor:pointer;
+    }
+    .card-deck .card-inner {
+      background: #cc0000;
+      border-color: rgba(255,255,255,.9);
+    }
+    /* Deck oval is injected via inline SVG in the HTML */
+    /* UNO text rendered via .card-value for deck */
+    .card-deck .card-value {
+      font-size:26px; font-style:italic; font-weight:900;
+      letter-spacing:2px;
+      color:#fff;
+      text-shadow: 2px 2px 0 #990000, 0 0 12px rgba(255,215,0,.6);
+      z-index:1;
+    }
+    .card-deck:hover { transform:translateY(-5px) scale(1.04); }
+
+    .top-card-wrap { position:relative; perspective:600px; }
+    .top-card-wrap::after {
+      content:''; position:absolute; inset:-8px; border-radius:18px; z-index:-1; transition:box-shadow .4s;
+    }
+    .top-card-wrap.glow-red::after    { box-shadow:0 0 36px 8px #ff3b3b55; }
+    .top-card-wrap.glow-yellow::after { box-shadow:0 0 36px 8px #ffd60055; }
+    .top-card-wrap.glow-green::after  { box-shadow:0 0 36px 8px #00e67655; }
+    .top-card-wrap.glow-blue::after   { box-shadow:0 0 36px 8px #2979ff55; }
+    .top-card-wrap.glow-wild::after   { box-shadow:0 0 20px 4px #aaa3; }
+
+    .board-info { display:flex; flex-direction:column; align-items:center; gap:10px; }
+    .direction-arrow { font-size:26px; transition:transform .4s; }
+    .direction-arrow.ccw { transform:scaleX(-1); }
+    .pending-draw-badge {
+      display:none; background:var(--red); color:#fff;
+      font-size:12px; font-weight:700; padding:4px 12px; border-radius:20px;
+    }
+    .pending-draw-badge.visible { display:block; animation:drawPulse .9s ease-in-out infinite; }
+    @keyframes drawPulse { 0%,100%{transform:scale(1)}50%{transform:scale(1.08);box-shadow:0 0 12px 4px #ff3b3b44} }
+
+    .action-bar { display:flex; gap:8px; align-items:center; flex-wrap:wrap; justify-content:center; }
+    .btn-action {
+      padding:10px 22px; border-radius:9px;
+      font-family:'DM Sans',sans-serif; font-size:13px; font-weight:700;
+      letter-spacing:.5px; cursor:pointer; border:none; transition:all .15s;
+      touch-action:manipulation;
+    }
+    .btn-uno {
+      background:var(--red); color:#fff;
+      box-shadow:0 2px 14px #ff3b3b44; font-size:15px; padding:12px 32px;
+    }
+    .btn-uno:hover  { transform:scale(1.05); box-shadow:0 4px 22px #ff3b3b66; }
+    .btn-uno:active { transform:scale(0.97); }
+
+    /* ══════════════════════════════════════════════
+       RIGHT PANEL
+    ══════════════════════════════════════════════ */
+    .right-panel { display:none; background:var(--surface); border-left:1px solid var(--border); flex-direction:column; }
+    @media (min-width:768px) { .right-panel { display:flex; } }
+    .right-tabs { display:flex; border-bottom:1px solid var(--border); }
+    .right-tab {
+      flex:1; padding:10px 8px; text-align:center; font-size:10px;
+      font-weight:700; letter-spacing:1px; text-transform:uppercase; color:var(--muted);
+      cursor:pointer; border:none; background:none; transition:color .2s;
+    }
+    .right-tab.active { color:var(--text); border-bottom:2px solid var(--red); }
+    .right-content { flex:1; overflow-y:auto; padding:10px; display:flex; flex-direction:column; gap:5px; }
+    .log-entry { font-size:11px; color:var(--muted); line-height:1.5; padding:1px 0; }
+    .log-entry .log-tag { color:var(--text); font-weight:600; }
+    .chat-msg { font-size:12px; line-height:1.5; }
+    .chat-msg .chat-name { font-weight:600; color:var(--yellow); }
+    .chat-input-row { display:flex; gap:6px; padding:8px; border-top:1px solid var(--border); }
+    .chat-input {
+      flex:1; background:var(--bg); border:1px solid var(--border);
+      color:var(--text); padding:7px 10px; border-radius:7px;
+      font-family:'DM Sans',sans-serif; font-size:12px; outline:none;
+    }
+    .chat-input:focus { border-color:var(--muted); }
+    .chat-input::placeholder { color:var(--muted); }
+    .chat-send { background:var(--border); border:none; color:var(--text); padding:7px 12px; border-radius:7px; cursor:pointer; font-size:14px; }
+    .chat-send:hover { background:var(--dim); }
+
+    /* ══════════════════════════════════════════════
+       HAND TRAY — FIXED BOTTOM ← THE CRITICAL FIX
+       Always visible, always scrollable horizontally
+    ══════════════════════════════════════════════ */
+    .hand-tray {
+      position: fixed;
+      bottom: 0; left: 0; right: 0;
+      z-index: 90;
+      height: var(--hand-h);
+      background: var(--surface);
+      border-top: 1px solid var(--border);
+      display: flex; flex-direction: column;
+      padding-bottom: env(safe-area-inset-bottom, 0px);
+    }
+    .hand-tray::before {
+      content:''; position:absolute; top:0; left:0; right:0; height:2px;
+      background:linear-gradient(90deg,var(--blue),var(--green),var(--yellow),var(--red));
+    }
+    .hand-header {
+      display:flex; align-items:center; justify-content:space-between;
+      padding:8px 14px 4px; flex-shrink:0;
+    }
+    .hand-label { font-size:9px; letter-spacing:2px; text-transform:uppercase; color:var(--muted); font-weight:600; }
+    .hand-count { font-size:12px; font-weight:700; color:var(--yellow); }
+
+    /* KEY FIX: overflow-y:visible so cards can lift upward on hover/tap */
+    .hand-cards {
+      flex:1;
+      display:flex; align-items:flex-end; gap:8px;
+      overflow-x:auto; overflow-y:visible;
+      padding:0 14px 12px;
+      -webkit-overflow-scrolling:touch;
+      scroll-snap-type:x proximity;
+      scrollbar-width:none;
+    }
+    .hand-cards::-webkit-scrollbar { display:none; }
+
+    /* Hand card — touch-size, lift on play */
+    .hand-card {
+      flex-shrink:0; cursor:pointer;
+      scroll-snap-align:start;
+      touch-action:manipulation;
+      transition:transform .15s ease;
+      /* extra bottom padding so lifted card doesn't clip */
+      padding-bottom: 4px;
+    }
+    .hand-card .card {
+      width:68px; height:102px;
+      /* disable the default board-card hover from parent .card rule */
+    }
+    .hand-card .card:hover { transform:none; }
+
+    .hand-card.playable:hover  { transform:translateY(-16px); }
+    .hand-card.playable:active { transform:translateY(-8px) scale(0.97); }
+
+    .hand-card.not-playable {
+      cursor:default;
+      filter:saturate(0.7) brightness(0.72);
+    }
+    .hand-card.not-playable:hover,
+    .hand-card.not-playable:active { transform:none; }
+
+    /* ══════════════════════════════════════════════
+       MOBILE PLAYER CHIPS
+    ══════════════════════════════════════════════ */
+    .mobile-players {
+      display:flex; gap:6px; overflow-x:auto; padding:0 14px;
+      scrollbar-width:none;
+    }
+    .mobile-players::-webkit-scrollbar { display:none; }
+    @media (min-width:768px) { .mobile-players { display:none; } }
+    .mobile-player-chip {
+      display:flex; align-items:center; gap:5px;
+      background:var(--surface); border:1px solid var(--border);
+      border-radius:20px; padding:4px 10px 4px 5px;
+      flex-shrink:0; cursor:pointer; transition:border-color .2s;
+    }
+    .mobile-player-chip.active-turn { border-color:var(--yellow); background:#ffd60015; }
+    .mobile-player-chip.is-me       { border-color:var(--green);  background:#00e67615; }
+    .chip-avatar {
+      width:20px; height:20px; border-radius:50%;
+      display:flex; align-items:center; justify-content:center;
+      font-size:9px; font-weight:800; text-transform:uppercase;
+    }
+    .chip-name  { font-size:11px; font-weight:600; white-space:nowrap; }
+    .chip-count { font-size:10px; color:var(--muted); }
+    .chip-uno   { font-size:8px; color:var(--red); font-weight:800; }
+
+    /* ══════════════════════════════════════════════
+       LOBBY
+    ══════════════════════════════════════════════ */
+    #lobby-overlay {
+      position:fixed; inset:0; z-index:200;
+      background:rgba(10,10,15,.94); backdrop-filter:blur(10px);
+      display:flex; align-items:center; justify-content:center; padding:20px;
+    }
+    .lobby-box {
+      background:var(--surface); border:1px solid var(--border);
+      border-radius:20px; padding:28px 24px; width:100%; max-width:380px;
+      text-align:center; position:relative; overflow:hidden;
+    }
+    .lobby-box::before {
+      content:''; position:absolute; top:0; left:0; right:0; height:2px;
+      background:linear-gradient(90deg,var(--red),var(--yellow),var(--green),var(--blue));
+    }
+    .lobby-title {
+      font-family:'Bebas Neue',sans-serif; font-size:32px; letter-spacing:3px;
+      background:linear-gradient(135deg,#ff3b3b,#ffd600);
+      -webkit-background-clip:text; -webkit-text-fill-color:transparent; background-clip:text;
+      margin-bottom:4px;
+    }
+    .lobby-room {
+      font-family:'JetBrains Mono',monospace; font-size:26px; letter-spacing:7px;
+      color:var(--text); background:var(--bg); border:1px solid var(--border);
+      border-radius:10px; padding:11px 18px; margin:14px 0; cursor:pointer;
+      transition:border-color .2s; display:block; text-align:center;
+    }
+    .lobby-room:hover { border-color:var(--yellow); }
+    .lobby-copy-hint  { font-size:11px; color:var(--muted); margin-bottom:14px; }
+    .lobby-players    { width:100%; margin-bottom:16px; }
+    .lobby-player-row {
+      display:flex; align-items:center; gap:8px; padding:7px 10px;
+      border-radius:8px; background:var(--bg); margin-bottom:5px; font-size:12px; font-weight:500;
+    }
+    .host-tag {
+      font-size:9px; letter-spacing:1px; text-transform:uppercase;
+      color:var(--yellow); background:#ffd60018; border:1px solid #ffd60033; padding:2px 5px; border-radius:4px;
+    }
+    .lobby-waiting {
+      font-size:12px; color:var(--muted); margin-bottom:14px;
+      display:flex; align-items:center; gap:5px; justify-content:center;
+    }
+    .dot-spin {
+      display:inline-block; width:5px; height:5px; background:var(--muted);
+      border-radius:50%; animation:dotBlink 1.2s infinite;
+    }
+    .dot-spin:nth-child(2){animation-delay:.2s} .dot-spin:nth-child(3){animation-delay:.4s}
+    @keyframes dotBlink { 0%,80%,100%{opacity:.3}40%{opacity:1} }
+    .btn-start {
+      width:100%; padding:13px; border-radius:10px;
+      background:linear-gradient(135deg,var(--green),#00bfa5);
+      color:var(--bg); font-family:'DM Sans',sans-serif;
+      font-size:15px; font-weight:800; cursor:pointer; border:none;
+      transition:all .15s; box-shadow:0 2px 16px #00e67644;
+    }
+    .btn-start:hover:not(:disabled) { transform:translateY(-1px); }
+    .btn-start:disabled { opacity:.4; cursor:not-allowed; }
+
+    /* ══════════════════════════════════════════════
+       COLOR PICKER
+    ══════════════════════════════════════════════ */
+    #color-picker {
+      display:none; position:fixed; inset:0; z-index:300;
+      background:rgba(0,0,0,.75); backdrop-filter:blur(8px);
+      align-items:center; justify-content:center;
+    }
+    #color-picker.visible { display:flex; }
+    .color-picker-box {
+      background:var(--surface); border:1px solid var(--border);
+      border-radius:18px; padding:24px; text-align:center;
+    }
+    .color-picker-title {
+      font-family:'Bebas Neue',sans-serif; font-size:22px; letter-spacing:2px;
+      margin-bottom:18px; color:var(--text);
+    }
+    .color-picker-grid { display:grid; grid-template-columns:repeat(2,1fr); gap:12px; }
+    .color-pick-btn {
+      width:76px; height:76px; border-radius:12px; border:2px solid rgba(255,255,255,.1);
+      cursor:pointer; transition:transform .15s, box-shadow .15s;
+      font-size:28px; display:flex; align-items:center; justify-content:center;
+      touch-action:manipulation;
+    }
+    .color-pick-btn:hover  { transform:scale(1.12); box-shadow:0 6px 24px rgba(0,0,0,.4); }
+    .color-pick-btn:active { transform:scale(0.96); }
+    .cpb-red    { background:linear-gradient(145deg,#b71c1c,#ef5350); }
+    .cpb-yellow { background:linear-gradient(145deg,#e65100,#fdd835); }
+    .cpb-green  { background:linear-gradient(145deg,#1b5e20,#43a047); }
+    .cpb-blue   { background:linear-gradient(145deg,#0d47a1,#1976d2); }
+
+    /* ══════════════════════════════════════════════
+       GAME OVER OVERLAY — rankings
+    ══════════════════════════════════════════════ */
+    #win-overlay {
+      display:none; position:fixed; inset:0; z-index:400;
+      background:rgba(0,0,0,.88); backdrop-filter:blur(12px);
+      align-items:center; justify-content:center; flex-direction:column;
+    }
+    #win-overlay.visible { display:flex; animation:fadeIn .5s ease both; }
+    .win-box {
+      background:var(--surface); border:1px solid var(--border);
+      border-radius:20px; padding:28px 24px; text-align:center;
+      max-width:360px; width:90%; max-height:90vh; overflow-y:auto;
+    }
+    .win-title {
+      font-family:'Bebas Neue',sans-serif; font-size:44px; letter-spacing:4px;
+      background:linear-gradient(135deg,#ffd600,#ff8c00);
+      -webkit-background-clip:text; -webkit-text-fill-color:transparent; background-clip:text;
+      margin-bottom:4px;
+    }
+    .win-btns { display:flex; gap:8px; justify-content:center; margin-top:20px; flex-wrap:wrap; }
+    .btn-rematch {
+      padding:10px 20px; border-radius:9px; font-family:'DM Sans',sans-serif;
+      font-size:13px; font-weight:700; cursor:pointer; border:none;
+      background:linear-gradient(135deg,var(--blue),#1565c0); color:#fff; transition:all .15s;
+    }
+    .btn-rejoin {
+      padding:10px 20px; border-radius:9px; font-family:'DM Sans',sans-serif;
+      font-size:13px; font-weight:700; cursor:pointer; border:none;
+      background:linear-gradient(135deg,var(--green),#00897b); color:var(--bg); transition:all .15s;
+    }
+    .btn-rejoin:hover { transform:translateY(-1px); box-shadow:0 4px 16px #00e67644; }
+    .btn-rejoin:disabled { opacity:.5; cursor:not-allowed; transform:none; }
+    .btn-back {
+      padding:10px 20px; border-radius:9px; font-family:'DM Sans',sans-serif;
+      font-size:13px; font-weight:700; background:var(--border); color:var(--text);
+      text-decoration:none; display:inline-flex; align-items:center;
+    }
+
+    /* Rankings list */
+    .rankings-list { display:flex; flex-direction:column; gap:8px; text-align:left; }
+    .rank-row {
+      display:flex; align-items:center; gap:12px;
+      padding:10px 14px; border-radius:12px;
+      border:1px solid var(--border); background:var(--bg);
+      animation:fadeUp .4s ease both;
+    }
+    .rank-row.rank-1 { border-color:#ffd60066; background:linear-gradient(135deg,#ffd60008,#ff8c0008); }
+    .rank-row.rank-2 { border-color:#aaaaaa44; background:#ffffff06; }
+    .rank-row.rank-3 { border-color:#cd7f3244; background:#cd7f3208; }
+    .rank-row.rank-last { border-color:#ff3b3b44; background:#ff3b3b08; }
+    .rank-medal { font-size:24px; flex-shrink:0; }
+    .rank-name  { flex:1; font-size:14px; font-weight:700; color:var(--text); }
+    .rank-label { font-size:11px; color:var(--muted); }
+    .rank-you   { font-size:10px; color:var(--green); font-weight:700; margin-left:4px; }
+
+    /* Mid-game rank toast */
+    #rank-toast {
+      position:fixed; top:calc(var(--topbar-h) + 12px); left:50%;
+      transform:translateX(-50%) translateY(-20px);
+      background:var(--surface); border:1px solid var(--border);
+      color:var(--text); padding:10px 20px; border-radius:40px;
+      font-size:14px; font-weight:600;
+      opacity:0; transition:all .3s; pointer-events:none;
+      z-index:500; max-width:90vw; text-align:center;
+      backdrop-filter:blur(8px);
+    }
+    #rank-toast.show { opacity:1; transform:translateX(-50%) translateY(0); }
+
+    /* Finished player in sidebar — dim but show rank badge */
+    .player-item.finished  { opacity:.5; }
+    .player-item.is-loser  { border-color:var(--red)!important; background:#ff3b3b08!important; }
+    .rank-badge {
+      font-size:14px; flex-shrink:0; line-height:1;
+    }
+
+    /* ══════════════════════════════════════════════
+       TOAST
+    ══════════════════════════════════════════════ */
+    #toast {
+      position:fixed; bottom:calc(var(--hand-h) + 14px); left:50%;
+      transform:translateX(-50%) translateY(16px);
+      background:rgba(18,18,26,.95); border:1px solid var(--border);
+      color:var(--text); padding:9px 20px; border-radius:40px;
+      font-size:13px; font-weight:500; opacity:0; transition:all .3s;
+      pointer-events:none; z-index:500; max-width:88vw; text-align:center;
+      backdrop-filter:blur(8px); white-space:nowrap;
+    }
+    #toast.show   { opacity:1; transform:translateX(-50%) translateY(0); }
+    #toast.error  { border-color:var(--red);    color:var(--red); }
+    #toast.green  { border-color:var(--green);  color:var(--green); }
+    #toast.yellow { border-color:var(--yellow); color:var(--yellow); }
+    #toast.blue   { border-color:var(--blue);   color:var(--blue); }
+    @keyframes fadeIn { from{opacity:0}to{opacity:1} }
+
+    /* scrollbars */
+    * { scrollbar-width:thin; scrollbar-color:#2a2a3e transparent; }
+    ::-webkit-scrollbar { width:4px; height:4px; }
+    ::-webkit-scrollbar-track { background:transparent; }
+    ::-webkit-scrollbar-thumb { background:#2a2a3e; border-radius:4px; }
+  </style>
+</head>
+<body>
+
+<!-- ══ LOBBY ══ -->
+<div id="lobby-overlay">
+  <div class="lobby-box">
+    <div class="lobby-title">Waiting Room</div>
+    <p style="color:var(--muted);font-size:12px;margin-bottom:12px">Share the code with friends</p>
+    <div class="lobby-room" id="lobby-room-code" onclick="copyRoomCode()" title="Tap to copy"></div>
+    <p class="lobby-copy-hint">Tap to copy · Share with friends</p>
+    <div class="lobby-players" id="lobby-player-list"></div>
+    <div class="lobby-waiting" id="lobby-waiting-msg">
+      <span class="dot-spin"></span><span class="dot-spin"></span><span class="dot-spin"></span>
+      Waiting for players…
+    </div>
+    <button class="btn-start" id="btn-start" onclick="startGame()" disabled>Start Game</button>
+    <p style="color:var(--muted);font-size:11px;margin-top:8px">Host starts the game</p>
+  </div>
+</div>
+
+<!-- ══ COLOR PICKER ══ -->
+<div id="color-picker">
+  <div class="color-picker-box">
+    <div class="color-picker-title">Choose a Color</div>
+    <div class="color-picker-grid">
+      <button class="color-pick-btn cpb-red"    onclick="pickColor('red')">🔴</button>
+      <button class="color-pick-btn cpb-yellow" onclick="pickColor('yellow')">🟡</button>
+      <button class="color-pick-btn cpb-green"  onclick="pickColor('green')">🟢</button>
+      <button class="color-pick-btn cpb-blue"   onclick="pickColor('blue')">🔵</button>
+    </div>
+  </div>
+</div>
+
+<!-- ══ PLAYER FINISHED TOAST (mid-game rank badge) ══ -->
+<div id="rank-toast"></div>
+
+<!-- ══ GAME OVER — FINAL RANKINGS ══ -->
+<div id="win-overlay">
+  <div class="win-box">
+    <div class="win-title" id="win-title-text">GAME OVER</div>
+    <p id="win-subtitle" style="color:var(--muted);font-size:12px;margin-bottom:16px">Final Rankings</p>
+    <div class="rankings-list" id="rankings-list"></div>
+    <div class="win-btns">
+      <!-- Host: Rematch button -->
+      <button class="btn-rematch" id="btn-rematch" onclick="requestRematch()" style="display:none">Rematch</button>
+      <!-- Non-host: Rejoin button (stays in socket room, waits for rematch) -->
+      <button class="btn-rejoin" id="btn-rejoin" onclick="rejoinGame()" style="display:none">🔄 Rejoin</button>
+      <button class="btn-back" onclick="goToLobby()">← Lobby</button>
+    </div>
+  </div>
+</div>
+
+<!-- ══ TOP BAR ══ -->
+<div class="topbar">
+  <div class="topbar-logo">UNO</div>
+  <div class="topbar-room" id="topbar-room">——</div>
+  <div class="topbar-ruleset rs-normal" id="topbar-ruleset">Normal</div>
+  <div class="side-badge" id="side-badge">Light</div>
+  <div class="topbar-spacer"></div>
+  <div class="color-indicator">
+    <div class="color-dot" id="color-dot"></div>
+    <span class="color-label" id="color-label">—</span>
+  </div>
+
+  <!-- Sound controls -->
+  <div class="sound-controls" id="sound-controls">
+    <button class="sound-btn" id="btn-sound-toggle" onclick="toggleSound()" title="Toggle sound">🔊</button>
+    <div class="sound-panel" id="sound-panel">
+      <div class="sp-row">
+        <span class="sp-label">Theme</span>
+        <div class="sp-theme-btns">
+          <button class="sp-theme active" id="sp-modern" onclick="setTheme('modern')">Modern</button>
+          <button class="sp-theme"        id="sp-classic" onclick="setTheme('classic')">Classic</button>
+        </div>
+      </div>
+      <div class="sp-row">
+        <span class="sp-label">SFX</span>
+        <input type="range" class="sp-slider" id="sfx-vol" min="0" max="1" step="0.05" value="0.7"
+               oninput="SoundEngine.setVolume('sfx', +this.value)" />
+      </div>
+      <div class="sp-row">
+        <span class="sp-label">Music</span>
+        <input type="range" class="sp-slider" id="music-vol" min="0" max="1" step="0.05" value="0.25"
+               oninput="SoundEngine.setVolume('music', +this.value)" />
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ══ MAIN WRAP ══ -->
+<div class="game-wrap">
+
+  <!-- Left panel — desktop players -->
+  <div class="left-panel">
+    <div class="panel-title">Players</div>
+    <div id="player-list"></div>
+  </div>
+
+  <!-- Center board -->
+  <div class="board">
+
+    <!-- Mobile player chips -->
+    <div class="mobile-players" id="mobile-players"></div>
+
+    <!-- Turn indicator -->
+    <div class="turn-indicator" id="turn-indicator">Waiting to start…</div>
+
+    <!-- Deck + discard + direction -->
+    <div class="pile-area">
+      <div class="card card-deck" id="btn-draw" onclick="drawCard()" title="Draw a card">
+        <div class="card-inner">
+          <svg viewBox="0 0 84 126" width="100%" height="100%"
+            preserveAspectRatio="xMidYMid meet"
+            style="position:absolute;inset:0;pointer-events:none;z-index:0;">
+            <ellipse cx="42" cy="63" rx="46" ry="28"
+              fill="none" stroke="rgba(255,215,0,0.95)" stroke-width="4"
+              transform="rotate(-30 42 63)"/>
+          </svg>
+          <div class="card-value">UNO</div>
+        </div>
+      </div>
+      <div class="top-card-wrap" id="top-card-wrap">
+        <div class="card card-wild" id="top-card">
+          <div class="card-inner"><div class="card-value">?</div></div>
+        </div>
+      </div>
+      <div class="board-info">
+        <div class="direction-arrow" id="direction-arrow">↻</div>
+        <div class="pending-draw-badge" id="pending-draw-badge">+0</div>
+      </div>
+    </div>
+
+    <!-- UNO button -->
+    <div class="action-bar">
+      <button class="btn-action btn-uno" onclick="callUno()">UNO!</button>
+    </div>
+
+  </div><!-- /board -->
+
+  <!-- Right panel — log/chat desktop -->
+  <div class="right-panel">
+    <div class="right-tabs">
+      <button class="right-tab active" onclick="switchRightTab('log')">Log</button>
+      <button class="right-tab"        onclick="switchRightTab('chat')">Chat</button>
+    </div>
+    <div id="right-log"  class="right-content"></div>
+    <div id="right-chat" class="right-content" style="display:none"></div>
+    <div class="chat-input-row">
+      <input class="chat-input" id="chat-input" placeholder="Say something…" maxlength="200"
+             onkeydown="if(event.key==='Enter')sendChat()" />
+      <button class="chat-send" onclick="sendChat()">➤</button>
+    </div>
+  </div>
+
+</div><!-- /game-wrap -->
+
+<!-- ══ HAND TRAY — fixed bottom, always visible ══ -->
+<div class="hand-tray">
+  <div class="hand-header">
+    <span class="hand-label">Your Hand</span>
+    <span class="hand-count" id="hand-count"></span>
+  </div>
+  <div class="hand-cards" id="hand-cards"></div>
+</div>
+
+<div id="toast"></div>
+
+<script>
+  const ROOM     = "{{ room }}";
+  const USERNAME = "{{ username }}";
+
+  let gameState      = null;
+  let myHand         = [];
+  let pendingCard    = null;
+  let isHost         = false;
+  let activeRightTab = 'log';
+  let lastLogLen     = 0;
+
+  // ── Socket ────────────────────────────────────────
+  const socket = io({ transports: ['websocket'] });
+  socket.on('connect', () => socket.emit('join', { username: USERNAME, room: ROOM }));
+  socket.on('error',        d => showToast(d.msg, 'error'));
+  socket.on('invalid_move', d => showToast(d.msg, 'error'));
+
+  socket.on('player_joined', d => { renderLobbyPlayers(d.players); addLog(`<span class="log-tag">${esc(d.username)}</span> joined.`); });
+  socket.on('player_left',   d => {
+    renderLobbyPlayers(d.players);
+    addLog(`<span class="log-tag">${esc(d.username)}</span> left.`);
+    if (gameState) { gameState.players = d.players; renderPlayers(); }
+  });
+  socket.on('reconnected', d => {
+    showToast(d.msg,'green');
+    document.getElementById('lobby-overlay').style.display = 'none';
+    handleGameState(d.state);
+  });
+  // ── isHost: always derived live from state, never stale ──────────
+  // host = the first player in the room (index 0 in players array)
+  function amIHost() {
+    if (gameState && gameState.players && gameState.players.length > 0)
+      return gameState.players[0].name === USERNAME;
+    return isHost; // fallback to lobby-set value before first state arrives
+  }
+
+  socket.on('game_started', state => {
+    const wasInGame = !!gameState;
+    const winOv = document.getElementById('win-overlay');
+    winOv.classList.remove('visible');
+    winOv.style.display = 'none';
+    document.getElementById('lobby-overlay').style.display = 'none';
+    document.getElementById('rankings-list').innerHTML = '';
+    const btn = document.getElementById('btn-rematch');
+    btn.style.display   = 'none';
+    btn.disabled        = false;
+    btn.style.opacity   = '1';
+    btn.textContent     = 'Rematch';
+    lastLogLen = 0;
+    document.getElementById('right-log').innerHTML  = '';
+    document.getElementById('right-chat').innerHTML = '';
+    myHand = [];
+    handleGameState(state);
+    SoundEngine.play('shuffle');
+    setTimeout(() => {
+      SoundEngine.play('gameStart');
+      SoundEngine.startMusic();
+    }, 600);
+    showToast(wasInGame ? '🎮 Rematch! Game on!' : '🎮 Game on!', 'green');
+  });
+  socket.on('your_hand', d => { if (d.ok) { myHand = d.hand; renderHand(); } });
+  socket.on('card_played', d => {
+    handleGameState(d.state);
+    const card = d.state?.top_card;
+    if (card) {
+      if (card.color === 'wild')           SoundEngine.play('wildCard');
+      else if (['Skip','Reverse','Flip','Skip Everyone'].includes(card.value))
+                                           SoundEngine.play('actionCard');
+      else if (['Draw 2','Draw 5','Draw 6','Draw 10','Wild Draw 4','Wild Draw Color'].includes(card.value))
+                                           SoundEngine.play('actionCard');
+      else                                 SoundEngine.play('cardPlay');
+    }
+    if (d.forced_draw) {
+      showToast(`${d.forced_draw.player} drew ${d.forced_draw.count}!`,'yellow');
+      setTimeout(() => SoundEngine.play('drawPenalty'), 300);
+    }
+    if (d.flipped_to) {
+      showToast(`🔄 Flipped to ${d.flipped_to} side!`,'blue');
+      SoundEngine.play('flip');
+    }
+    if (d.roulette_victim) {
+      showToast(`🎲 ${d.roulette_victim.player} drew ${d.roulette_victim.count}!`,'yellow');
+      SoundEngine.play('roulette');
+    }
+  });
+  socket.on('card_drawn', d => {
+    handleGameState(d.state);
+    SoundEngine.play('cardDraw');
+    if (d.player !== USERNAME) addLog(`<span class="log-tag">${esc(d.player)}</span> drew ${d.drawn}.`);
+  });
+  socket.on('uno_called', d => {
+    handleGameState(d.state);
+    SoundEngine.play('unoCall');
+    showToast(`🚨 ${d.player} called UNO!`,'error');
+    addLog(`<span class="log-tag">${esc(d.player)}</span> called UNO!`);
+  });
+  socket.on('uno_challenge_result', d => {
+    handleGameState(d.state);
+    const m = d.caught ? `😅 ${d.challenger} caught ${d.target} — +2!` : `${d.challenger} challenged ${d.target} — safe.`;
+    if (d.caught) SoundEngine.play('unoCaught');
+    else          SoundEngine.play('buttonClick');
+    showToast(m, d.caught?'yellow':''); addLog(m);
+  });
+  socket.on('chat_message', d => {
+    const el = document.createElement('div'); el.className='chat-msg';
+    el.innerHTML=`<span class="chat-name">${esc(d.player)}</span>: ${esc(d.msg)}`;
+    const chat=document.getElementById('right-chat'); chat.appendChild(el); chat.scrollTop=99999;
+    if(activeRightTab==='log'){ const t=document.querySelectorAll('.right-tab')[1]; if(t) t.style.color='var(--yellow)'; }
+  });
+  socket.on('game_over', d => {
+    handleGameState(d.state);
+    showRankings(d.finished_players, d.loser);
+    SoundEngine.stopMusic();
+    const isWinner = d.finished_players[0] === USERNAME;
+    const isLoser  = d.loser === USERNAME;
+    setTimeout(() => {
+      if (isWinner)     SoundEngine.play('win');
+      else if (isLoser) SoundEngine.play('lose');
+      else              SoundEngine.play('gameStart'); // mid-place — neutral
+    }, 400);
+
+    const btnRematch = document.getElementById('btn-rematch');
+    const btnRejoin  = document.getElementById('btn-rejoin');
+    if (amIHost()) {
+      btnRematch.style.display  = 'inline-flex';
+      btnRematch.textContent    = 'Rematch';
+      btnRematch.disabled       = false;
+      btnRematch.style.opacity  = '1';
+      btnRejoin.style.display   = 'none';
+    } else {
+      btnRejoin.style.display   = 'inline-flex';
+      btnRejoin.textContent     = '🔄 Rejoin';
+      btnRejoin.disabled        = false;
+      btnRematch.style.display  = 'none';
+    }
+    addLog(`🏁 Game over! Rankings: ${d.finished_players.map((n,i)=>(['🥇','🥈','🥉'][i]||'#'+(i+1))+' '+n).join(' · ')}`);
+  });
+
+  // Host clicked rematch — server broadcasts this to all players
+  socket.on('rematch_starting', d => {
+    // Update whichever button is visible
+    const btnRematch = document.getElementById('btn-rematch');
+    const btnRejoin  = document.getElementById('btn-rejoin');
+    [btnRematch, btnRejoin].forEach(b => {
+      if (b.style.display !== 'none') {
+        b.textContent   = '🔄 Starting…';
+        b.disabled      = true;
+        b.style.opacity = '0.7';
+      }
+    });
+  });
+
+  function requestRematch() {
+    if (!amIHost()) return;
+    socket.emit('rematch', {});
+    const btn = document.getElementById('btn-rematch');
+    btn.textContent   = '🔄 Starting…';
+    btn.disabled      = true;
+    btn.style.opacity = '0.7';
+  }
+
+  // Non-host clicks Rejoin — just closes the overlay, stays in socket room
+  // When host clicks Rematch, game_started arrives and resets everything
+  function rejoinGame() {
+    const winOv = document.getElementById('win-overlay');
+    winOv.classList.remove('visible');
+    winOv.style.display = 'none';
+    showToast('✅ Back in room! Waiting for host to start rematch…', 'green');
+    // Update button states so it's clear what's happening
+    document.getElementById('btn-rejoin').style.display  = 'none';
+    document.getElementById('btn-rematch').style.display = 'none';
+  }
+
+  // ── Player finished mid-game (emptied their hand) ─────────────────
+  socket.on('player_finished', d => {
+    handleGameState(d.state);
+    const medals = ['🥇','🥈','🥉'];
+    const medal = medals[d.rank-1] || `#${d.rank}`;
+    const isMe  = d.player === USERNAME;
+    const msg   = isMe
+      ? `${medal} You finished in place #${d.rank}! Keep watching…`
+      : `${medal} ${d.player} finished in place #${d.rank}!`;
+    showRankToast(msg);
+    addLog(msg);
+  });
+
+  // ── State handler ─────────────────────────────────
+  function handleGameState(state) {
+    gameState = state;
+    renderTopBar(state);
+    renderPlayers();
+    renderTopCard(state);
+    renderTurnIndicator(state);
+    renderHand();
+    if (state.log) syncLog(state.log);
+  }
+
+  // ── Renders ───────────────────────────────────────
+  function renderTopBar(s) {
+    document.getElementById('topbar-room').textContent = ROOM;
+    const rs = document.getElementById('topbar-ruleset');
+    rs.textContent = {normal:'Normal',flip:'Flip',nomercy:'No Mercy'}[s.ruleset]||s.ruleset;
+    rs.className = `topbar-ruleset rs-${s.ruleset}`;
+
+    const sb = document.getElementById('side-badge');
+    if (s.ruleset==='flip' && s.current_side) {
+      sb.textContent = s.current_side==='light'?'☀️ Light':'🌙 Dark';
+      sb.className = `side-badge ${s.current_side}`;
+    } else sb.className = 'side-badge';
+
+    const col = s.current_color||'wild';
+    const dot = document.getElementById('color-dot'), lbl = document.getElementById('color-label');
+    dot.style.background=colorToCSS(col); dot.style.boxShadow=`0 0 8px ${colorToCSS(col)}88`;
+    lbl.textContent=col; lbl.style.color=colorToCSS(col);
+
+    const pb = document.getElementById('pending-draw-badge');
+    if (s.pending_draw>0) { pb.textContent=`+${s.pending_draw} draw!`; pb.classList.add('visible'); }
+    else pb.classList.remove('visible');
+
+    document.getElementById('direction-arrow').className = 'direction-arrow'+(s.direction===-1?' ccw':'');
+  }
+
+  function renderLobbyPlayers(players) {
+    isHost = players.length>0 && players[0].name===USERNAME;
+    document.getElementById('lobby-room-code').textContent = ROOM;
+    document.getElementById('lobby-player-list').innerHTML = players.map((p,i)=>`
+      <div class="lobby-player-row">
+        <div style="width:26px;height:26px;border-radius:6px;background:${avatarColor(p.name)};display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700">${p.name[0].toUpperCase()}</div>
+        <span style="flex:1">${esc(p.name)}${p.name===USERNAME?' <span style="color:var(--muted);font-size:10px">(you)</span>':''}</span>
+        ${i===0?'<span class="host-tag">Host</span>':''}
+      </div>`).join('');
+    const btn = document.getElementById('btn-start');
+    btn.disabled = !isHost || players.length<2;
+    document.getElementById('lobby-waiting-msg').innerHTML = isHost
+      ? `<span style="color:var(--green)">✓ You are the host</span>`
+      : `<span class="dot-spin"></span><span class="dot-spin"></span><span class="dot-spin"></span> Waiting for host…`;
+  }
+
+  function renderPlayers() {
+    if (!gameState) return;
+    const ps = gameState.players;
+    const medals = ['🥇','🥈','🥉'];
+
+    function playerItemHTML(p) {
+      const isMe     = p.name === USERNAME;
+      const isActive = p.name === gameState.current_turn;
+      const isLoser  = p.name === gameState.loser;
+      const cls = ['player-item',
+        isMe      ? 'is-me'       : '',
+        isActive  ? 'active-turn' : '',
+        p.eliminated ? 'eliminated' : '',
+        p.finished   ? 'finished'   : '',
+        isLoser      ? 'is-loser'   : '',
+      ].filter(Boolean).join(' ');
+
+      let rankBadge = '';
+      if (p.rank != null) {
+        const m = medals[p.rank-1] || `#${p.rank}`;
+        rankBadge = `<div class="rank-badge" title="Finished #${p.rank}">${m}</div>`;
+      }
+
+      return `<div class="${cls}" onclick="challengeUno('${esc(p.name)}')" title="Challenge UNO">
+        <div class="player-avatar" style="background:${avatarColor(p.name)}">${p.name[0].toUpperCase()}</div>
+        <div class="player-info">
+          <div class="player-name">${esc(p.name)}${isMe?' <span style="color:var(--muted);font-size:9px">(you)</span>':''}</div>
+          <div class="player-cards">${p.finished ? 'Finished' : p.eliminated ? 'Eliminated' : `${p.card_count} card${p.card_count!==1?'s':''}`}</div>
+        </div>
+        ${p.called_uno && !p.finished ? '<div class="uno-badge">UNO</div>' : ''}
+        ${isActive && !p.finished ? '<div style="color:var(--yellow)">●</div>' : ''}
+        ${rankBadge}
+      </div>`;
+    }
+
+    // Desktop
+    document.getElementById('player-list').innerHTML = ps.map(playerItemHTML).join('');
+
+    // Mobile chips
+    document.getElementById('mobile-players').innerHTML = ps.map(p => {
+      const isMe    = p.name === USERNAME;
+      const isActive= p.name === gameState.current_turn;
+      const m = p.rank != null ? (medals[p.rank-1]||`#${p.rank}`) : '';
+      return `<div class="mobile-player-chip ${isMe?'is-me':''} ${isActive&&!p.finished?'active-turn':''} ${p.finished?'finished':''}"
+                   onclick="challengeUno('${esc(p.name)}')">
+        <div class="chip-avatar" style="background:${avatarColor(p.name)}">${p.name[0].toUpperCase()}</div>
+        <span class="chip-name">${esc(p.name)}</span>
+        ${m ? `<span style="font-size:14px">${m}</span>` : `<span class="chip-count">${p.finished?'✓':p.card_count}</span>`}
+        ${p.called_uno && !p.finished ? '<span class="chip-uno">UNO!</span>' : ''}
+      </div>`;
+    }).join('');
+  }
+
+  // ── Rankings overlay ──────────────────────────────────
+  function showRankings(finishedPlayers, loser) {
+    const medals  = ['🥇','🥈','🥉'];
+    const list    = document.getElementById('rankings-list');
+
+    list.innerHTML = finishedPlayers.map((name, i) => {
+      const rank   = i + 1;
+      const medal  = medals[i] || `#${rank}`;
+      const isLast = name === loser;
+      const isMe   = name === USERNAME;
+      const rowCls = `rank-row rank-${isLast ? 'last' : Math.min(rank, 4)}`;
+      const label  = isLast ? '😬 Last place' : rank === 1 ? '🏆 Winner' : `Place #${rank}`;
+      return `<div class="${rowCls}" style="animation-delay:${i*80}ms">
+        <div class="rank-medal">${medal}</div>
+        <div class="rank-name">${esc(name)}${isMe ? '<span class="rank-you">(you)</span>' : ''}</div>
+        <div class="rank-label">${label}</div>
+      </div>`;
+    }).join('');
+
+    // Dynamic title based on where YOU finished
+    const myIdx   = finishedPlayers.indexOf(USERNAME);
+    const titleEl = document.getElementById('win-title-text');
+    if (myIdx === 0)             titleEl.textContent = 'YOU WIN! 🏆';
+    else if (USERNAME === loser) titleEl.textContent = 'YOU LOSE! 😬';
+    else                         titleEl.textContent = 'GAME OVER';
+
+    // Subtitle — guide each player on what to do next
+    const sub = document.getElementById('win-subtitle');
+    if (sub) {
+      sub.innerHTML = amIHost()
+        ? 'Final Rankings · Click <b style="color:var(--blue)">Rematch</b> to play again with everyone'
+        : 'Final Rankings · Click <b style="color:var(--green)">Rejoin</b> and wait for host to start';
+    }
+
+    // Restore display (game_started sets it to 'none' as hard override)
+    const winOv = document.getElementById('win-overlay');
+    winOv.style.display = '';
+    winOv.classList.add('visible');
+  }
+
+  // ── Mid-game rank toast ───────────────────────────────────────────
+  function showRankToast(msg) {
+    const t = document.getElementById('rank-toast');
+    t.textContent = msg;
+    t.className   = 'show';
+    clearTimeout(t._t);
+    t._t = setTimeout(() => t.className = '', 4000);
+  }
+
+  // ── Lobby navigation — warn before leaving so socket stays alive ──
+  function goToLobby() {
+    if (confirm('Leave the room? You will not receive rematch invites.')) {
+      window.location.href = '/';
+    }
+  }
+
+  function renderTopCard(s) {
+    if (!s.top_card) return;
+    const tc=s.top_card, card=document.getElementById('top-card');
+    card.className=`card card-${tc.color}`;
+    // Must wrap in card-inner so corners/value sit inside the styled container
+    card.innerHTML=`<div class="card-inner">${cardHTML(tc)}</div>`;
+    const glow=tc.color==='wild'?'wild':(s.current_color||tc.color);
+    document.getElementById('top-card-wrap').className=`top-card-wrap glow-${glow}`;
+  }
+
+  function renderTurnIndicator(s) {
+    const el=document.getElementById('turn-indicator');
+    if (!s.current_turn){el.innerHTML='Waiting…';return;}
+    el.innerHTML = s.current_turn===USERNAME
+      ? `<span class="my-turn">Your turn!</span>`
+      : `<span class="opp-name">${esc(s.current_turn)}</span>'s turn`;
+  }
+
+  function renderHand() {
+    const c=document.getElementById('hand-cards');
+    document.getElementById('hand-count').textContent = myHand.length?`${myHand.length} card${myHand.length!==1?'s':''}`:'';
+    const myTurn = gameState && gameState.current_turn===USERNAME;
+    c.innerHTML = myHand.map(card=>`
+      <div class="hand-card ${myTurn&&isPlayable(card)?'playable':'not-playable'}"
+           data-id="${card.id}" onclick="playCard('${card.id}')" title="${esc(card.label)}">
+        <div class="card card-${card.color}">
+          <div class="card-inner">${cardHTML(card)}</div>
+        </div>
+      </div>`).join('');
+  }
+
+  function isPlayable(card) {
+    if (!gameState) return false;
+    const cur=gameState.current_color, top=gameState.top_card, side=gameState.current_side||'light';
+    if (card.side && card.side!==side) return false;
+    if (card.color==='wild') return true;
+    if (gameState.pending_draw>0) return ['Draw 2','Wild Draw 4','Draw 5','Draw 6','Draw 10'].includes(card.value);
+    if (card.color===cur) return true;
+    if (top && card.value===top.value) return true;
+    return false;
+  }
+
+  // ── SVG symbols matching real UNO card designs ───────
+  const CARD_SYMBOLS = {
+    // ── Numbers: plain digit ──────────────────────────
+    // handled by isNumber check below
+
+    // ── Skip: circle with bar through center ─────────
+    'Skip': {
+      corner: `<svg viewBox="0 0 20 20" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round">
+        <circle cx="10" cy="10" r="8"/>
+        <line x1="3.5" y1="10" x2="16.5" y2="10"/>
+      </svg>`,
+      center: `<svg viewBox="0 0 60 60" width="46" height="46" fill="none" stroke="white" stroke-width="5" stroke-linecap="round">
+        <circle cx="30" cy="30" r="24"/>
+        <line x1="8" y1="30" x2="52" y2="30"/>
+      </svg>`
+    },
+
+    // ── Reverse: two circular arrows ──────────────────
+    'Reverse': {
+      corner: `<svg viewBox="0 0 20 20" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M15 7 A6 6 0 1 0 15 13"/>
+        <polyline points="17,4 15,7 12,5"/>
+      </svg>`,
+      center: `<svg viewBox="0 0 60 60" width="46" height="46" fill="none" stroke="white" stroke-width="5" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M44 18 A18 18 0 1 0 44 42"/>
+        <polyline points="52,10 44,18 36,12"/>
+        <path d="M16 42 A18 18 0 1 0 16 18"/>
+        <polyline points="8,50 16,42 24,48"/>
+      </svg>`
+    },
+
+    // ── Draw 2: two stacked card rects + "+2" ─────────
+    'Draw 2': {
+      corner: `<svg viewBox="0 0 20 20" width="14" height="14">
+        <rect x="5" y="7" width="11" height="9" rx="1.5" fill="rgba(255,255,255,0.3)" stroke="currentColor" stroke-width="1.5"/>
+        <rect x="3" y="5" width="11" height="9" rx="1.5" fill="rgba(255,255,255,0.15)" stroke="currentColor" stroke-width="1.5"/>
+        <text x="10" y="11" text-anchor="middle" font-size="5" font-weight="800" fill="currentColor" font-family="sans-serif">+2</text>
+      </svg>`,
+      center: `<svg viewBox="0 0 60 60" width="46" height="46">
+        <rect x="18" y="22" width="32" height="26" rx="4" fill="rgba(255,255,255,0.25)" stroke="white" stroke-width="2.5"/>
+        <rect x="10" y="14" width="32" height="26" rx="4" fill="rgba(255,255,255,0.15)" stroke="white" stroke-width="2.5"/>
+        <text x="26" y="32" text-anchor="middle" font-size="16" font-weight="900" fill="white" font-family="'Bebas Neue',sans-serif" font-style="italic">+2</text>
+      </svg>`
+    },
+
+    // ── Wild: 4-color pinwheel ─────────────────────────
+    'Wild': {
+      corner: `<svg viewBox="0 0 20 20" width="14" height="14">
+        <path d="M10 10 L10 2 A8 8 0 0 1 18 10 Z" fill="#ff3b3b"/>
+        <path d="M10 10 L18 10 A8 8 0 0 1 10 18 Z" fill="#ffd600"/>
+        <path d="M10 10 L10 18 A8 8 0 0 1 2 10 Z" fill="#00c853"/>
+        <path d="M10 10 L2 10 A8 8 0 0 1 10 2 Z" fill="#2979ff"/>
+        <circle cx="10" cy="10" r="2.5" fill="white"/>
+      </svg>`,
+      center: `<svg viewBox="0 0 60 60" width="52" height="52">
+        <path d="M30 30 L30 5 A25 25 0 0 1 55 30 Z" fill="#ff3b3b"/>
+        <path d="M30 30 L55 30 A25 25 0 0 1 30 55 Z" fill="#ffd600"/>
+        <path d="M30 30 L30 55 A25 25 0 0 1 5 30 Z" fill="#00c853"/>
+        <path d="M30 30 L5 30 A25 25 0 0 1 30 5 Z" fill="#2979ff"/>
+        <circle cx="30" cy="30" r="8" fill="white" opacity="0.9"/>
+      </svg>`
+    },
+
+    // ── Wild Draw 4: stacked cards + 4-color wheel ────
+    'Wild Draw 4': {
+      corner: `<svg viewBox="0 0 20 20" width="14" height="14">
+        <rect x="8" y="10" width="9" height="7" rx="1" fill="#ff3b3b" stroke="white" stroke-width="0.8"/>
+        <rect x="5" y="7"  width="9" height="7" rx="1" fill="#ffd600" stroke="white" stroke-width="0.8"/>
+        <rect x="3" y="4"  width="9" height="7" rx="1" fill="#00c853" stroke="white" stroke-width="0.8"/>
+        <rect x="1" y="1"  width="9" height="7" rx="1" fill="#2979ff" stroke="white" stroke-width="0.8"/>
+        <text x="15" y="20" text-anchor="middle" font-size="5" font-weight="800" fill="white" font-family="sans-serif">+4</text>
+      </svg>`,
+      center: `<svg viewBox="0 0 60 68" width="46" height="52">
+        <rect x="30" y="34" width="26" height="20" rx="3" fill="#ff3b3b" stroke="white" stroke-width="1.5"/>
+        <rect x="22" y="26" width="26" height="20" rx="3" fill="#ffd600" stroke="white" stroke-width="1.5"/>
+        <rect x="12" y="18" width="26" height="20" rx="3" fill="#00c853" stroke="white" stroke-width="1.5"/>
+        <rect x="4"  y="10" width="26" height="20" rx="3" fill="#2979ff" stroke="white" stroke-width="1.5"/>
+        <text x="44" y="62" text-anchor="middle" font-size="14" font-weight="900" fill="white" font-family="'Bebas Neue',sans-serif" font-style="italic">+4</text>
+      </svg>`
+    },
+
+    // ── Flip: stacked cards + up-arrow ────────────────
+    'Flip': {
+      corner: `<svg viewBox="0 0 20 20" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <rect x="3" y="8" width="10" height="8" rx="1.5"/>
+        <path d="M8 8 L8 3 L14 6.5"/>
+      </svg>`,
+      center: `<svg viewBox="0 0 60 60" width="46" height="46" fill="none" stroke="white" stroke-width="4" stroke-linecap="round" stroke-linejoin="round">
+        <rect x="8" y="28" width="30" height="24" rx="4" stroke-width="3"/>
+        <rect x="16" y="20" width="30" height="24" rx="4" stroke-width="3" stroke-dasharray="3,2"/>
+        <path d="M30 20 L30 6 L46 14"/>
+      </svg>`
+    },
+
+    // ── Skip Everyone: double skip circle ─────────────
+    'Skip Everyone': {
+      corner: `<svg viewBox="0 0 24 20" width="16" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+        <circle cx="7" cy="10" r="6"/>
+        <line x1="2.7" y1="5.7" x2="11.3" y2="14.3"/>
+        <circle cx="17" cy="10" r="6"/>
+        <line x1="12.7" y1="5.7" x2="21.3" y2="14.3"/>
+      </svg>`,
+      center: `<svg viewBox="0 0 70 60" width="52" height="44" fill="none" stroke="white" stroke-width="4.5" stroke-linecap="round">
+        <circle cx="20" cy="30" r="16"/>
+        <line x1="8.7" y1="18.7" x2="31.3" y2="41.3"/>
+        <circle cx="50" cy="30" r="16"/>
+        <line x1="38.7" y1="18.7" x2="61.3" y2="41.3"/>
+      </svg>`
+    },
+
+    // ── Draw 5: 5 stacked cards ────────────────────────
+    'Draw 5': {
+      corner: `<svg viewBox="0 0 20 20" width="14" height="14">
+        <rect x="6" y="9"  width="10" height="7" rx="1" fill="rgba(255,255,255,0.3)" stroke="currentColor" stroke-width="1.2"/>
+        <rect x="4" y="7"  width="10" height="7" rx="1" fill="rgba(255,255,255,0.2)" stroke="currentColor" stroke-width="1.2"/>
+        <rect x="2" y="5"  width="10" height="7" rx="1" fill="rgba(255,255,255,0.1)" stroke="currentColor" stroke-width="1.2"/>
+        <text x="11" y="19" text-anchor="middle" font-size="5" font-weight="800" fill="currentColor" font-family="sans-serif">+5</text>
+      </svg>`,
+      center: `<svg viewBox="0 0 60 60" width="46" height="46">
+        <rect x="20" y="26" width="30" height="22" rx="3.5" fill="rgba(255,255,255,0.25)" stroke="white" stroke-width="2.2"/>
+        <rect x="14" y="20" width="30" height="22" rx="3.5" fill="rgba(255,255,255,0.18)" stroke="white" stroke-width="2.2"/>
+        <rect x="8"  y="14" width="30" height="22" rx="3.5" fill="rgba(255,255,255,0.12)" stroke="white" stroke-width="2.2"/>
+        <text x="28" y="34" text-anchor="middle" font-size="16" font-weight="900" fill="white" font-family="'Bebas Neue',sans-serif" font-style="italic">+5</text>
+      </svg>`
+    },
+
+    // ── Wild Draw Color: 4-color wheel (dark variant) ──
+    'Wild Draw Color': {
+      corner: `<svg viewBox="0 0 20 20" width="14" height="14">
+        <path d="M10 10 L10 2 A8 8 0 0 1 18 10 Z" fill="#f06292"/>
+        <path d="M10 10 L18 10 A8 8 0 0 1 10 18 Z" fill="#26c6da"/>
+        <path d="M10 10 L10 18 A8 8 0 0 1 2 10 Z" fill="#ff7043"/>
+        <path d="M10 10 L2 10 A8 8 0 0 1 10 2 Z" fill="#ab47bc"/>
+        <circle cx="10" cy="10" r="2.5" fill="white"/>
+      </svg>`,
+      center: `<svg viewBox="0 0 60 60" width="52" height="52">
+        <path d="M30 30 L30 5 A25 25 0 0 1 55 30 Z" fill="#f06292"/>
+        <path d="M30 30 L55 30 A25 25 0 0 1 30 55 Z" fill="#26c6da"/>
+        <path d="M30 30 L30 55 A25 25 0 0 1 5 30 Z" fill="#ff7043"/>
+        <path d="M30 30 L5 30 A25 25 0 0 1 30 5 Z" fill="#ab47bc"/>
+        <circle cx="30" cy="30" r="8" fill="white" opacity="0.9"/>
+      </svg>`
+    },
+
+    // ── Draw 6 ─────────────────────────────────────────
+    'Draw 6': {
+      corner: `<svg viewBox="0 0 20 20" width="14" height="14">
+        <rect x="7"  y="11" width="10" height="7" rx="1" fill="rgba(255,255,255,0.35)" stroke="currentColor" stroke-width="1.2"/>
+        <rect x="4.5" y="8.5" width="10" height="7" rx="1" fill="rgba(255,255,255,0.22)" stroke="currentColor" stroke-width="1.2"/>
+        <rect x="2" y="6" width="10" height="7" rx="1" fill="rgba(255,255,255,0.12)" stroke="currentColor" stroke-width="1.2"/>
+        <text x="12" y="19" text-anchor="middle" font-size="5" font-weight="800" fill="currentColor" font-family="sans-serif">+6</text>
+      </svg>`,
+      center: `<svg viewBox="0 0 60 60" width="46" height="46">
+        <rect x="22" y="28" width="30" height="22" rx="3.5" fill="rgba(255,255,255,0.25)" stroke="white" stroke-width="2.2"/>
+        <rect x="15" y="21" width="30" height="22" rx="3.5" fill="rgba(255,255,255,0.18)" stroke="white" stroke-width="2.2"/>
+        <rect x="8"  y="14" width="30" height="22" rx="3.5" fill="rgba(255,255,255,0.12)" stroke="white" stroke-width="2.2"/>
+        <text x="30" y="35" text-anchor="middle" font-size="16" font-weight="900" fill="white" font-family="'Bebas Neue',sans-serif" font-style="italic">+6</text>
+      </svg>`
+    },
+
+    // ── Draw 10 ────────────────────────────────────────
+    'Draw 10': {
+      corner: `<svg viewBox="0 0 20 20" width="14" height="14">
+        <rect x="7" y="11"  width="10" height="7" rx="1" fill="#ff3b3b" stroke="white" stroke-width="0.8"/>
+        <rect x="5" y="8.5" width="10" height="7" rx="1" fill="#ffd600" stroke="white" stroke-width="0.8"/>
+        <rect x="3" y="6"   width="10" height="7" rx="1" fill="#00c853" stroke="white" stroke-width="0.8"/>
+        <rect x="1" y="3.5" width="10" height="7" rx="1" fill="#2979ff" stroke="white" stroke-width="0.8"/>
+        <text x="14" y="20" text-anchor="middle" font-size="4.5" font-weight="800" fill="white" font-family="sans-serif">+10</text>
+      </svg>`,
+      center: `<svg viewBox="0 0 60 72" width="46" height="54">
+        <rect x="32" y="40" width="26" height="20" rx="3" fill="#ff3b3b" stroke="white" stroke-width="1.5"/>
+        <rect x="24" y="32" width="26" height="20" rx="3" fill="#ffd600" stroke="white" stroke-width="1.5"/>
+        <rect x="14" y="22" width="26" height="20" rx="3" fill="#00c853" stroke="white" stroke-width="1.5"/>
+        <rect x="4"  y="12" width="26" height="20" rx="3" fill="#2979ff" stroke="white" stroke-width="1.5"/>
+        <text x="45" y="66" text-anchor="middle" font-size="13" font-weight="900" fill="white" font-family="'Bebas Neue',sans-serif" font-style="italic">+10</text>
+      </svg>`
+    },
+
+    // ── Discard All: X over card stack ────────────────
+    'Discard All': {
+      corner: `<svg viewBox="0 0 20 20" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round">
+        <rect x="3" y="5" width="11" height="9" rx="1.5" stroke-width="2"/>
+        <line x1="3" y1="5" x2="14" y2="14"/>
+        <line x1="14" y1="5" x2="3" y2="14"/>
+      </svg>`,
+      center: `<svg viewBox="0 0 60 60" width="46" height="46" fill="none" stroke="white" stroke-width="4.5" stroke-linecap="round">
+        <rect x="8" y="16" width="34" height="26" rx="4"/>
+        <rect x="18" y="10" width="34" height="26" rx="4" stroke-dasharray="4,3" opacity="0.5"/>
+        <line x1="14" y1="22" x2="36" y2="42"/>
+        <line x1="36" y1="22" x2="14" y2="42"/>
+      </svg>`
+    },
+
+    // ── Wild Roulette: question mark + dice ──────────
+    'Wild Roulette': {
+      corner: `<svg viewBox="0 0 20 20" width="14" height="14">
+        <text x="10" y="15" text-anchor="middle" font-size="14" fill="currentColor" font-family="sans-serif">🎲</text>
+      </svg>`,
+      center: `<svg viewBox="0 0 60 60" width="48" height="48">
+        <text x="30" y="42" text-anchor="middle" font-size="38" font-family="sans-serif">🎲</text>
+      </svg>`
+    },
+  };
+
+  // Inline SVG oval — rendered inside every card, behind content
+  // Uses an <ellipse> with a wide rx / short ry then rotated -30deg
+  function ovalSVG(color) {
+    const stroke = color === 'yellow' ? 'rgba(255,255,255,0.7)' : 'rgba(255,255,255,0.82)';
+    return `<svg class="card-oval-svg" viewBox="0 0 84 126" width="100%" height="100%"
+      preserveAspectRatio="xMidYMid meet"
+      style="position:absolute;inset:0;pointer-events:none;z-index:0;">
+      <ellipse cx="42" cy="63" rx="46" ry="28"
+        fill="none" stroke="${stroke}" stroke-width="3.5"
+        transform="rotate(-30 42 63)"/>
+    </svg>`;
+  }
+
+  function cardHTML(card) {
+    const v = card.value;
+    const isNum = /^[0-9]$/.test(v);
+    const oval = ovalSVG(card.color);
+
+    if (isNum) {
+      return `
+        ${oval}
+        <div class="card-corner tl">${v}</div>
+        <div class="card-value">${v}</div>
+        <div class="card-corner br" style="transform:rotate(180deg)">${v}</div>`;
+    }
+
+    const sym = CARD_SYMBOLS[v];
+    if (!sym) {
+      return `${oval}<div class="card-corner tl">${v}</div><div class="card-value" style="font-size:14px">${v}</div><div class="card-corner br">${v}</div>`;
+    }
+
+    return `
+      ${oval}
+      <div class="card-corner tl">${sym.corner}</div>
+      <div class="card-symbol">${sym.center}</div>
+      <div class="card-corner br" style="transform:rotate(180deg)">${sym.corner}</div>`;
+  }
+
+  // ── Actions ───────────────────────────────────────
+  function playCard(id) {
+    if (!gameState||gameState.current_turn!==USERNAME){showToast('Not your turn!','error');return;}
+    const card=myHand.find(c=>c.id===id);
+    if (!card||!isPlayable(card)){showToast("Can't play that card!",'error');return;}
+    if (card.color==='wild'){pendingCard=id;document.getElementById('color-picker').classList.add('visible');}
+    else socket.emit('play_card',{card_id:id});
+  }
+  function pickColor(color) {
+    document.getElementById('color-picker').classList.remove('visible');
+    if(pendingCard){socket.emit('play_card',{card_id:pendingCard,chosen_color:color});pendingCard=null;}
+  }
+  function drawCard() {
+    if (!gameState||gameState.current_turn!==USERNAME){showToast('Not your turn!','error');return;}
+    socket.emit('draw_card');
+  }
+  function callUno()          { socket.emit('call_uno'); }
+  function challengeUno(name) { if(name!==USERNAME) socket.emit('challenge_uno',{target:name}); }
+  function startGame()        { socket.emit('start_game',{}); }
+  function sendChat()         {
+    const inp=document.getElementById('chat-input'), msg=inp.value.trim();
+    if(msg){socket.emit('chat',{msg});inp.value='';}
+  }
+
+  // ── Log ───────────────────────────────────────────
+  function syncLog(entries) {
+    if(entries.length===lastLogLen) return;
+    const c=document.getElementById('right-log');
+    entries.slice(lastLogLen).forEach(m=>{const el=document.createElement('div');el.className='log-entry';el.innerHTML=m;c.appendChild(el);});
+    lastLogLen=entries.length; c.scrollTop=99999;
+  }
+  function addLog(html) {
+    const c=document.getElementById('right-log'),el=document.createElement('div');
+    el.className='log-entry';el.innerHTML=html;c.appendChild(el);c.scrollTop=99999;
+  }
+
+  // ── Helpers ───────────────────────────────────────
+  function switchRightTab(name) {
+    activeRightTab=name;
+    document.querySelectorAll('.right-tab').forEach((t,i)=>{
+      t.classList.toggle('active',(i===0&&name==='log')||(i===1&&name==='chat'));
+      if(i===1&&name==='chat') t.style.color='';
+    });
+    document.getElementById('right-log').style.display  = name==='log' ?'flex':'none';
+    document.getElementById('right-chat').style.display = name==='chat'?'flex':'none';
+  }
+  function copyRoomCode() {
+    navigator.clipboard?.writeText(ROOM).then(()=>showToast('Copied! 📋','green')).catch(()=>showToast(ROOM));
+  }
+  function showToast(msg,type='') {
+    const t=document.getElementById('toast');
+    t.textContent=msg; t.className='show'+(type?` ${type}`:'');
+    clearTimeout(t._t); t._t=setTimeout(()=>t.className='',3500);
+  }
+  function colorToCSS(c) {
+    return{red:'#ff3b3b',yellow:'#ffd600',green:'#00e676',blue:'#2979ff',
+           pink:'#f06292',teal:'#26c6da',orange:'#ff7043',purple:'#ab47bc',wild:'#888'}[c]||'#888';
+  }
+  function avatarColor(name) {
+    const p=['#ff3b3b','#ffd600','#00e676','#2979ff','#f06292','#26c6da','#ff7043','#ab47bc'];
+    let h=0; for(let i=0;i<name.length;i++) h=name.charCodeAt(i)+((h<<5)-h);
+    return p[Math.abs(h)%p.length];
+  }
+  function esc(s) { return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+
+  // Init
+  document.getElementById('lobby-room-code').textContent = ROOM;
+  document.getElementById('topbar-room').textContent     = ROOM;
+
+  // ── Sound control UI ──────────────────────────────────────────
+  function toggleSound() {
+    const on = !SoundEngine.isEnabled();
+    SoundEngine.toggle(on);
+    const btn = document.getElementById('btn-sound-toggle');
+    btn.textContent = on ? '🔊' : '🔇';
+    btn.classList.toggle('muted', !on);
+    if (on && gameState?.started) SoundEngine.startMusic();
+  }
+
+  function setTheme(theme) {
+    SoundEngine.setTheme(theme);
+    document.getElementById('sp-modern').classList.toggle('active',  theme === 'modern');
+    document.getElementById('sp-classic').classList.toggle('active', theme === 'classic');
+    SoundEngine.play('gameStart');
+  }
+
+  // Toggle sound panel open/close
+  document.getElementById('btn-sound-toggle').addEventListener('click', () => {
+    const panel = document.getElementById('sound-panel');
+    panel.classList.toggle('open');
+  });
+
+  // Close sound panel clicking outside
+  document.addEventListener('click', e => {
+    if (!document.getElementById('sound-controls').contains(e.target)) {
+      document.getElementById('sound-panel').classList.remove('open');
+    }
+  });
+
+  // Init UI from saved settings
+  (function initSoundUI() {
+    const t  = SoundEngine.getTheme();
+    const on = SoundEngine.isEnabled();
+    document.getElementById('sp-modern').classList.toggle('active',  t === 'modern');
+    document.getElementById('sp-classic').classList.toggle('active', t === 'classic');
+    document.getElementById('btn-sound-toggle').textContent = on ? '🔊' : '🔇';
+    document.getElementById('btn-sound-toggle').classList.toggle('muted', !on);
+  })();
+
+  // Add sound to playCard / drawCard / callUno / buttons
+  const _origPlayCard = window.playCard;
+  window.playCard = function(id) {
+    SoundEngine.play('buttonClick');
+    if (typeof _origPlayCard === 'function') _origPlayCard(id);
+  };
+
+  // Sound on draw button click
+  document.getElementById('btn-draw')?.addEventListener('mousedown', () => {
+    if (gameState?.current_turn === USERNAME) SoundEngine.play('cardDraw');
+  });
+
+  // Sound on UNO button
+  document.querySelector('.btn-uno')?.addEventListener('mousedown', () => {
+    SoundEngine.play('buttonClick');
+  });
+</script>
+</body>
+</html>
