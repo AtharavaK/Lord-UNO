@@ -826,7 +826,11 @@
   socket.on('error',        d => showToast(d.msg, 'error'));
   socket.on('invalid_move', d => showToast(d.msg, 'error'));
 
-  socket.on('player_joined', d => { renderLobbyPlayers(d.players); addLog(`<span class="log-tag">${esc(d.username)}</span> joined.`); });
+  socket.on('player_joined', d => {
+    if (d.host) hostUsername = d.host;   // lock in host identity from server
+    renderLobbyPlayers(d.players);
+    addLog(`<span class="log-tag">${esc(d.username)}</span> joined.`);
+  });
   socket.on('player_left',   d => {
     renderLobbyPlayers(d.players);
     addLog(`<span class="log-tag">${esc(d.username)}</span> left.`);
@@ -837,15 +841,18 @@
     document.getElementById('lobby-overlay').style.display = 'none';
     handleGameState(d.state);
   });
-  // ── isHost: always derived live from state, never stale ──────────
-  // host = the first player in the room (index 0 in players array)
+  // ── hostUsername: set by server, never depends on join order ────
+  let hostUsername = null;
+
+  // ── amIHost: uses server-provided host identity ───────────────
   function amIHost() {
-    if (gameState && gameState.players && gameState.players.length > 0)
-      return gameState.players[0].name === USERNAME;
-    return isHost; // fallback to lobby-set value before first state arrives
+    if (hostUsername) return hostUsername === USERNAME;
+    if (gameState?.players?.length > 0) return gameState.players[0].name === USERNAME;
+    return isHost;
   }
 
   socket.on('game_started', state => {
+    if (state.host_username) hostUsername = state.host_username; // update from server
     const wasInGame = !!gameState;
     const winOv = document.getElementById('win-overlay');
     winOv.classList.remove('visible');
@@ -1032,13 +1039,15 @@
   }
 
   function renderLobbyPlayers(players) {
-    isHost = players.length>0 && players[0].name===USERNAME;
+    // Use server-provided hostUsername — never trust join order
+    const host = hostUsername || (players.length > 0 ? players[0].name : null);
+    isHost = host === USERNAME;
     document.getElementById('lobby-room-code').textContent = ROOM;
-    document.getElementById('lobby-player-list').innerHTML = players.map((p,i)=>`
+    document.getElementById('lobby-player-list').innerHTML = players.map(p=>`
       <div class="lobby-player-row">
         <div style="width:26px;height:26px;border-radius:6px;background:${avatarColor(p.name)};display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700">${p.name[0].toUpperCase()}</div>
         <span style="flex:1">${esc(p.name)}${p.name===USERNAME?' <span style="color:var(--muted);font-size:10px">(you)</span>':''}</span>
-        ${i===0?'<span class="host-tag">Host</span>':''}
+        ${p.name===host?'<span class="host-tag">Host</span>':''}
       </div>`).join('');
     const btn = document.getElementById('btn-start');
     btn.disabled = !isHost || players.length<2;
