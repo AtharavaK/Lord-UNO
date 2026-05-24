@@ -171,6 +171,12 @@ def game_room(room):
     return render_template("game.html", room=room, username=username)
 
 
+@app.route("/ping")
+def ping():
+    """Health check — used by UptimeRobot to keep server alive."""
+    return "pong", 200
+
+
 @app.route("/api/rooms/<room>/state")
 def room_state(room):
     game = active_games.get(room)
