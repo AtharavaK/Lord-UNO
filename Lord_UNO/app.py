@@ -131,6 +131,7 @@ def create_game_route():
     with games_lock:
         room_code = generate_room_code()
         game = create_game(ruleset)
+        game.host_username = username          # ← store host identity at creation
         active_games[room_code] = game
 
     session["username"] = username
@@ -253,6 +254,7 @@ def on_join(data: dict):
         "username": username,
         "msg":      f"{username} has joined!",
         "players":  [p.to_dict() for p in game.players],
+        "host":     getattr(game, "host_username", None),
     }, to=room)
 
 
@@ -265,9 +267,20 @@ def on_start_game(data: dict):
         emit("error", {"msg": "You are not in a room."})
         return
 
-    # Only the first player (host) can start
-    if not game.players or game.players[0].sid != sid:
+    # Identify caller by their registered player name
+    player = game.get_player_by_sid(sid)
+    if not player:
+        emit("error", {"msg": "You are not in this room."})
+        return
+
+    # Host = the username that created the room (stored at creation, never depends on join order)
+    host = getattr(game, "host_username", None) or (game.players[0].name if game.players else None)
+    if player.name != host:
         emit("error", {"msg": "Only the host can start the game."})
+        return
+
+    if len(game.players) < MIN_PLAYERS:
+        emit("error", {"msg": f"Need at least {MIN_PLAYERS} players to start."})
         return
 
     result = game.start_game()
@@ -277,7 +290,9 @@ def on_start_game(data: dict):
 
     log.info("Game started in room %s", room)
     _emit_all_hands(room, game)
-    socketio.emit("game_started", game.get_state(), to=room)
+    state = game.get_state()
+    state["host_username"] = getattr(game, "host_username", None)
+    socketio.emit("game_started", state, to=room)
 
 
 @socketio.on("play_card")
@@ -433,7 +448,9 @@ def on_rematch(data: dict):
     if not room or not game:
         return
 
-    if not game.players or game.players[0].sid != sid:
+    player = game.get_player_by_sid(sid)
+    host   = getattr(game, "host_username", None) or (game.players[0].name if game.players else None)
+    if not player or player.name != host:
         emit("error", {"msg": "Only the host can request a rematch."})
         return
 
@@ -441,6 +458,7 @@ def on_rematch(data: dict):
     socketio.emit("rematch_starting", {"countdown": 1}, to=room)
 
     new_game = create_game(game.RULESET, game.max_players)
+    new_game.host_username = getattr(game, "host_username", None)
 
     # Re-register all existing players — keep their SIDs so they stay in room
     for p in game.players:
