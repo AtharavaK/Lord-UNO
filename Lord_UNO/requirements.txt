@@ -1,22 +1,8 @@
-# UNO Arena — Python dependencies
-# Install with: pip install -r requirements.txt
-
-# Core web framework
-Flask>=2.3,<4.0
-
-# WebSocket support
-Flask-SocketIO>=5.3,<6.0
-python-socketio>=5.8,<6.0
-python-engineio>=4.5,<5.0
-
-# Async backends — app auto-detects whichever is available
-# For Termux / local LAN: threading is built-in, no install needed
-# For Render / Railway (production): eventlet recommended
-eventlet>=0.33       ; sys_platform != "win32"
-# gevent>=22.10      # uncomment if eventlet fails on your platform
-
-# WSGI server (used by eventlet in production)
-gunicorn>=20.1       ; sys_platform != "win32"
-
-# Werkzeug (Flask dependency, pinned for compatibility)
-Werkzeug>=2.3,<4.0
+Flask==3.0.3
+Flask-SocketIO==5.3.6
+python-socketio==5.11.3
+python-engineio==4.9.1
+gevent==24.2.1
+gevent-websocket==0.10.1
+gunicorn==22.0.0
+Werkzeug==3.0.3
