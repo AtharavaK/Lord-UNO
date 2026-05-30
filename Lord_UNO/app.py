@@ -168,7 +168,10 @@ def game_room(room):
     if room not in active_games:
         return redirect(url_for("index"))
     username = session.get("username", "Guest")
-    return render_template("game.html", room=room, username=username)
+    game     = active_games[room]
+    # Tell the client immediately if they are host — no socket race condition
+    is_host  = getattr(game, "host_username", None) == username
+    return render_template("game.html", room=room, username=username, is_host=is_host)
 
 
 @app.route("/ping")
