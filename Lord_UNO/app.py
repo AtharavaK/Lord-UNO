@@ -174,6 +174,25 @@ def game_room(room):
     return render_template("game.html", room=room, username=username, is_host=is_host)
 
 
+@app.route("/debug/<room>")
+def debug_room(room):
+    """Debug endpoint — see exactly what server knows about a room."""
+    game = active_games.get(room.upper())
+    if not game:
+        return jsonify({"error": "room not found", "active_rooms": list(active_games.keys())})
+    return jsonify({
+        "room":         room.upper(),
+        "host_username": getattr(game, "host_username", None),
+        "started":      game.started,
+        "player_count": len(game.players),
+        "players": [
+            {"name": p.name, "sid": p.sid[:8] + "…"}
+            for p in game.players
+        ],
+        "sid_to_room_count": len(sid_to_room),
+    })
+
+
 @app.route("/ping")
 def ping():
     """Health check — used by UptimeRobot to keep server alive."""
@@ -272,19 +291,27 @@ def on_start_game(data: dict):
     sid  = request.sid
     room, game = _resolve_room(sid)
 
+    log.info("START_GAME attempt — sid=%s room=%s game=%s", sid[:8], room, "found" if game else "NOT FOUND")
+
     if not room or not game:
+        log.warning("START_GAME failed — sid %s not in sid_to_room. Keys: %s",
+                    sid[:8], [k[:8] for k in sid_to_room.keys()])
         emit("error", {"msg": "You are not in a room."})
         return
 
-    # Identify caller by their registered player name
     player = game.get_player_by_sid(sid)
+    log.info("START_GAME — player=%s host=%s players=%s",
+             player.name if player else "NOT FOUND",
+             getattr(game, "host_username", None),
+             [p.name + "/" + p.sid[:8] for p in game.players])
+
     if not player:
         emit("error", {"msg": "You are not in this room."})
         return
 
-    # Host = the username that created the room (stored at creation, never depends on join order)
     host = getattr(game, "host_username", None) or (game.players[0].name if game.players else None)
     if player.name != host:
+        log.warning("START_GAME rejected — %s is not host (%s)", player.name, host)
         emit("error", {"msg": "Only the host can start the game."})
         return
 
