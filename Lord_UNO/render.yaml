@@ -1,11 +1,10 @@
 services:
   - type: web
-    name: uno-arena
+    name: Lord-UNO
     runtime: python
-    region: singapore
     plan: free
     buildCommand: pip install -r requirements.txt
-    startCommand: python app.py
+    startCommand: python3 app.py
     envVars:
       - key: SECRET_KEY
         generateValue: true
