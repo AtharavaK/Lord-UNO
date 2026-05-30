@@ -29,18 +29,20 @@ app.config.update(
 )
 
 def _detect_async_mode() -> str:
-    """Pick the best available async backend automatically."""
+    """Pick the best available async backend.
+    gevent is preferred — eventlet breaks on Python 3.12+.
+    """
     try:
-        import eventlet          # noqa: F401
-        return "eventlet"
-    except ImportError:
-        pass
-    try:
-        import gevent            # noqa: F401
+        import gevent          # noqa: F401
         return "gevent"
     except ImportError:
         pass
-    return "threading"           # always available, no extra install needed
+    try:
+        import eventlet        # noqa: F401
+        return "eventlet"
+    except ImportError:
+        pass
+    return "threading"
 
 socketio = SocketIO(
     app,
