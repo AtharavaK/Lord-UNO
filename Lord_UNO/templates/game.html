@@ -812,13 +812,15 @@
 <script>
   const ROOM     = "{{ room }}";
   const USERNAME = "{{ username }}";
+  const IS_HOST  = {{ 'true' if is_host else 'false' }};
 
   let gameState      = null;
   let myHand         = [];
   let pendingCard    = null;
-  let isHost         = false;
+  let isHost         = IS_HOST;          // set immediately from Flask — no socket race
   let activeRightTab = 'log';
   let lastLogLen     = 0;
+  let hostUsername   = IS_HOST ? USERNAME : null;  // known at page load for host
 
   // ── Socket ────────────────────────────────────────
   const socket = io({ transports: ['websocket'] });
@@ -841,9 +843,6 @@
     document.getElementById('lobby-overlay').style.display = 'none';
     handleGameState(d.state);
   });
-  // ── hostUsername: set by server, never depends on join order ────
-  let hostUsername = null;
-
   // ── amIHost: uses server-provided host identity ───────────────
   function amIHost() {
     if (hostUsername) return hostUsername === USERNAME;
@@ -1517,6 +1516,14 @@
   // Init
   document.getElementById('lobby-room-code').textContent = ROOM;
   document.getElementById('topbar-room').textContent     = ROOM;
+
+  // ── Set lobby state immediately from Flask-injected IS_HOST ──
+  if (IS_HOST) {
+    document.getElementById('lobby-waiting-msg').innerHTML =
+      `<span style="color:var(--green)">✓ You are the host</span>`;
+    // Host can start with 1 player (themselves) — button enables when ≥2
+    // but at least show it's not a non-host button
+  }
 
   // ── Sound control UI ──────────────────────────────────────────
   function toggleSound() {
